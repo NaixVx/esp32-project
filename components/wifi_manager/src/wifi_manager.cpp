@@ -1,14 +1,13 @@
-#include "WiFiManager.hpp"
+#include "wifi_manager.hpp"
 
 #include <cstring>
 
 #include "esp_log.h"
 #include "esp_mac.h"
 
-static const char* TAG = "WiFiManager";
+static const char* TAG = "wifi_manager";
 
-WiFiManager::WiFiManager(const char* ssid, const char* password, int maxConnections)
-    : _ssid(ssid), _password(password), _maxConnections(maxConnections) {}
+WiFiManager::WiFiManager(const NetworkConfig& config) : _config(config) {}
 
 void WiFiManager::startAP() {
     ESP_LOGI(TAG, "Starting Wi-Fi in AP mode...");
@@ -31,13 +30,13 @@ void WiFiManager::startAP() {
 
     // Configure access point
     wifi_config_t ap_config = {};
-    strncpy((char*)ap_config.ap.ssid, _ssid, sizeof(ap_config.ap.ssid));
-    strncpy((char*)ap_config.ap.password, _password, sizeof(ap_config.ap.password));
-    ap_config.ap.ssid_len = strlen(_ssid);
-    ap_config.ap.max_connection = _maxConnections;
+    strncpy((char*)ap_config.ap.ssid, _config.ap_ssid, sizeof(ap_config.ap.ssid));
+    strncpy((char*)ap_config.ap.password, _config.ap_password, sizeof(ap_config.ap.password));
+    ap_config.ap.ssid_len = strlen(_config.ap_ssid);
+    ap_config.ap.max_connection = 4;
     ap_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
 
-    if (strlen(_password) == 0) {
+    if (strlen(_config.ap_password) == 0) {
         ap_config.ap.authmode = WIFI_AUTH_OPEN;
     }
 
@@ -45,7 +44,7 @@ void WiFiManager::startAP() {
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "Access Point started. SSID: %s", _ssid);
+    ESP_LOGI(TAG, "Access Point started. SSID: %s", _config.ap_ssid);
 }
 
 void WiFiManager::onWiFiEvent(void* arg, esp_event_base_t event_base, int32_t event_id,

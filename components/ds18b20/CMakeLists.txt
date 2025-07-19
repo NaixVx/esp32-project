@@ -1,3 +1,3 @@
-idf_component_register(SRCS "DS18B20.cpp"
+idf_component_register(SRCS "src/ds18b20.cpp"
                        INCLUDE_DIRS "include"
                        REQUIRES driver)

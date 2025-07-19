@@ -1,4 +1,4 @@
-#include "DS18B20.hpp"
+#include "ds18b20.hpp"
 
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
