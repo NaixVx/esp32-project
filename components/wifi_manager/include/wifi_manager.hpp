@@ -10,6 +10,7 @@ class WiFiManager {
    public:
     WiFiManager(const NetworkConfig& config);
     void startAP();
+    void logApIp();
 
    private:
     NetworkConfig _config;

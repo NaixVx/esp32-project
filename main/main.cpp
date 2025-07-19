@@ -4,6 +4,7 @@
 #include "ds18b20.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "http_server.hpp"
 #include "nvs_flash.h"
 #include "wifi_manager.hpp"
 
@@ -16,7 +17,7 @@ extern "C" void app_main() {
     }
     ESP_ERROR_CHECK(ret);
 
-    DeviceConfig config;
+    static DeviceConfig config;
     if (ConfigManager::load(config) != ESP_OK) {
         ConfigManager::setDefaults(config);
         ConfigManager::save(config);
@@ -25,8 +26,12 @@ extern "C" void app_main() {
     static WiFiManager wifi(config.network);
     wifi.startAP();
 
+    static HttpServer http_server(config.info);
+    http_server.start();
+
     static DS18B20 ds18b20_sensor(GPIO_NUM_4);
 
+    // MAIN FUNCTIONALITY
     xTaskCreate(
         [](void*) {
             while (true) {

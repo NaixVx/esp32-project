@@ -9,6 +9,16 @@ static const char* TAG = "wifi_manager";
 
 WiFiManager::WiFiManager(const NetworkConfig& config) : _config(config) {}
 
+void WiFiManager::logApIp() {
+    esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (netif) {
+        esp_netif_ip_info_t ip_info;
+        if (esp_netif_get_ip_info(netif, &ip_info) == ESP_OK) {
+            ESP_LOGI(TAG, "AP IP address: " IPSTR, IP2STR(&ip_info.ip));
+        }
+    }
+}
+
 void WiFiManager::startAP() {
     ESP_LOGI(TAG, "Starting Wi-Fi in AP mode...");
 
@@ -45,6 +55,8 @@ void WiFiManager::startAP() {
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "Access Point started. SSID: %s", _config.ap_ssid);
+
+    WiFiManager::logApIp();
 }
 
 void WiFiManager::onWiFiEvent(void* arg, esp_event_base_t event_base, int32_t event_id,
