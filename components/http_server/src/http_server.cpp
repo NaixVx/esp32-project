@@ -34,10 +34,8 @@ esp_err_t HttpServer::infoHandler(httpd_req_t* req) {
     auto* server = static_cast<HttpServer*>(req->user_ctx);
 
     char resp[256];
-    snprintf(resp, sizeof(resp),
-             "{ \"device_name\": \"%s\", \"firmware_version\": \"%s\", \"max_connections\": %d }",
-             server->device_info.device_name, server->device_info.firmware_version,
-             server->device_info.max_connections);
+    snprintf(resp, sizeof(resp), "{ \"device_name\": \"%s\", \"firmware_version\": \"%s\"}",
+             server->device_info.device_name, server->device_info.firmware_version);
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);

@@ -2,43 +2,92 @@
 
 #include <cstring>
 
+#include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 
-esp_err_t ConfigManager::save(const DeviceConfig& config) {
-    nvs_handle_t nvs;
-    esp_err_t err = nvs_open("storage", NVS_READWRITE, &nvs);
-    if (err != ESP_OK) return err;
+static const char* TAG = "config_manager";
+constexpr const char* NVS_NAMESPACE = "storage";
+constexpr const char* NVS_KEY = "dev_config";
 
-    err = nvs_set_blob(nvs, "dev_config", &config, sizeof(config));
-    if (err == ESP_OK) err = nvs_commit(nvs);
+esp_err_t ConfigManager::save(const DeviceConfig& config) {
+    ESP_LOGI(TAG, "Saving device config to NVS");
+
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_blob(nvs, NVS_KEY, &config, sizeof(config));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set config blob: %s", esp_err_to_name(err));
+    } else {
+        err = nvs_commit(nvs);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to commit config: %s", esp_err_to_name(err));
+        } else {
+            ESP_LOGI(TAG, "Config saved successfully");
+        }
+    }
 
     nvs_close(nvs);
     return err;
 }
 
 esp_err_t ConfigManager::load(DeviceConfig& config) {
+    ESP_LOGI(TAG, "Loading device config from NVS");
+
     nvs_handle_t nvs;
-    esp_err_t err = nvs_open("storage", NVS_READONLY, &nvs);
-    if (err != ESP_OK) return err;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS: %s", esp_err_to_name(err));
+        return err;
+    }
 
     size_t required_size = sizeof(config);
-    err = nvs_get_blob(nvs, "dev_config", &config, &required_size);
+    err = nvs_get_blob(nvs, NVS_KEY, &config, &required_size);
     nvs_close(nvs);
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Config loaded successfully");
+    } else {
+        ESP_LOGW(TAG, "No valid config found: %s", esp_err_to_name(err));
+    }
 
     return err;
 }
 
 void ConfigManager::setDefaults(DeviceConfig& config) {
+    ESP_LOGW(TAG, "Setting default config");
     std::memset(&config, 0, sizeof(config));
 
-    // General device info
+    // Device Info
     strcpy(config.info.device_name, "esp32-project");
     strcpy(config.info.firmware_version, "0.001");
 
-    // Network settings
+    // Network
     strcpy(config.network.ap_ssid, "ESP32_default_AP");
-    strcpy(config.network.ap_password, "defaultPassword");
+    config.network.ap_password[0] = '\0';
     config.network.ap_enabled = true;
     config.network.sta_enabled = false;
+    config.network.max_connections = 5;
+}
+
+bool ConfigManager::isValid(const DeviceConfig& config) {
+    bool valid = true;
+
+    if (strlen(config.info.device_name) == 0 || strlen(config.info.firmware_version) == 0 ||
+        strlen(config.network.ap_ssid) == 0) {
+        valid = false;
+    }
+
+    if (!valid) {
+        ESP_LOGW(TAG, "Config validation failed");
+    } else {
+        ESP_LOGI(TAG, "Config validation passed");
+    }
+
+    return valid;
 }

@@ -18,7 +18,7 @@ extern "C" void app_main() {
     ESP_ERROR_CHECK(ret);
 
     static DeviceConfig config;
-    if (ConfigManager::load(config) != ESP_OK) {
+    if (ConfigManager::load(config) != ESP_OK || !ConfigManager::isValid(config)) {
         ConfigManager::setDefaults(config);
         ConfigManager::save(config);
     }
