@@ -15,6 +15,9 @@ class HttpServer {
     const DeviceInfo& device_info;
 
     void registerEndpoints();
+
     static esp_err_t infoHandler(httpd_req_t* req);
+    static esp_err_t rootHandler(httpd_req_t* req);
     static esp_err_t infoHandlerWrapper(httpd_req_t* req);
+    static esp_err_t rootHandlerWrapper(httpd_req_t* req);
 };
