@@ -7,6 +7,7 @@
 struct DeviceInfo {
     char device_name[32];
     char firmware_version[16];
+    uint64_t last_boot_ts;
 };
 
 struct NetworkConfig {
@@ -17,9 +18,17 @@ struct NetworkConfig {
     uint8_t max_connections;
 };
 
+struct RuntimeNetworkStatus {
+    char ssid[32];
+    char bssid[18];
+    char ip_address[16];
+    char mac_address[18];
+};
+
 struct DeviceConfig {
     DeviceInfo info;
     NetworkConfig network;
+    RuntimeNetworkStatus networkStatus;
 };
 
 class ConfigManager {

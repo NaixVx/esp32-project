@@ -66,6 +66,7 @@ void ConfigManager::setDefaults(DeviceConfig& config) {
     // Device Info
     strcpy(config.info.device_name, "esp32-project");
     strcpy(config.info.firmware_version, "0.001");
+    config.info.last_boot_ts = 0;
 
     // Network
     strcpy(config.network.ap_ssid, "ESP32_default_AP");
@@ -73,6 +74,11 @@ void ConfigManager::setDefaults(DeviceConfig& config) {
     config.network.ap_enabled = true;
     config.network.sta_enabled = false;
     config.network.max_connections = 5;
+
+    config.networkStatus.ssid[0] = '\0';
+    config.networkStatus.bssid[0] = '\0';
+    config.networkStatus.ip_address[0] = '\0';
+    config.networkStatus.mac_address[0] = '\0';
 }
 
 bool ConfigManager::isValid(const DeviceConfig& config) {
