@@ -9,7 +9,7 @@
 #include "wifi_manager.hpp"
 
 extern "C" void app_main() {
-    // INIT DEVICE, CONFIG AND SENSORS
+    // INIT NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -17,12 +17,11 @@ extern "C" void app_main() {
     }
     ESP_ERROR_CHECK(ret);
 
-    static DeviceConfig config;
-    if (ConfigManager::load(config) != ESP_OK || !ConfigManager::isValid(config)) {
-        ConfigManager::setDefaults(config);
-        ConfigManager::save(config);
-    }
+    // INIT CONFIG MANAGER
+    ConfigManager& configManager = ConfigManager::getInstance();
+    DeviceConfig config = configManager.getConfig();
 
+    // INIT WIFI & HTTP
     static WiFiManager wifi(config.network);
     wifi.startAP();
 

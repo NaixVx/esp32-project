@@ -15,7 +15,12 @@ void HttpServer::registerEndpoints() {
     // Root
     httpd_uri_t root_uri = {
         .uri = "/", .method = HTTP_GET, .handler = rootHandlerWrapper, .user_ctx = (void*)this};
-    httpd_register_uri_handler(server_handle, &root_uri);
+    esp_err_t err = httpd_register_uri_handler(server_handle, &root_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register GET /: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Registered GET /");
+    }
 
     // Favicon (empty)
     httpd_uri_t favicon_uri = {.uri = "/favicon.ico",
@@ -26,7 +31,12 @@ void HttpServer::registerEndpoints() {
                                        return httpd_resp_send(req, NULL, 0);
                                    },
                                .user_ctx = nullptr};
-    httpd_register_uri_handler(server_handle, &favicon_uri);
+    err = httpd_register_uri_handler(server_handle, &favicon_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register GET /favicon.ico: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Registered GET /favicon.ico");
+    }
 
     // ───────────── DEVICE INFO ─────────────
 
@@ -35,44 +45,75 @@ void HttpServer::registerEndpoints() {
                                        .method = HTTP_GET,
                                        .handler = infoHandlerWrapper,
                                        .user_ctx = (void*)this};
-    httpd_register_uri_handler(server_handle, &get_device_info_uri);
+    err = httpd_register_uri_handler(server_handle, &get_device_info_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register GET /api/device/info: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Registered GET /api/device/info");
+    }
 
     // PATCH /api/device/info
     httpd_uri_t patch_device_info_uri = {.uri = "/api/device/info",
                                          .method = HTTP_PATCH,
                                          .handler = patchDeviceInfoHandlerWrapper,
                                          .user_ctx = (void*)this};
-    httpd_register_uri_handler(server_handle, &patch_device_info_uri);
+    err = httpd_register_uri_handler(server_handle, &patch_device_info_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register PATCH /api/device/info: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Registered PATCH /api/device/info");
+    }
 
     // ───────────── NETWORK CONFIG ─────────────
 
-    // POST /api/network/ap
-    httpd_uri_t post_ap_config_uri = {.uri = "/api/network/ap",
+    // POST /api/network/ap/set
+    httpd_uri_t post_ap_config_uri = {.uri = "/api/network/ap/set",
                                       .method = HTTP_POST,
                                       .handler = postApConfigHandlerWrapper,
                                       .user_ctx = (void*)this};
-    httpd_register_uri_handler(server_handle, &post_ap_config_uri);
+    err = httpd_register_uri_handler(server_handle, &post_ap_config_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register POST /api/network/ap/set: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Registered POST /api/network/ap/set");
+    }
 
     // POST /api/network/sta/connect
     httpd_uri_t post_sta_connect_uri = {.uri = "/api/network/sta/connect",
                                         .method = HTTP_POST,
                                         .handler = staConnectHandlerWrapper,
                                         .user_ctx = (void*)this};
-    httpd_register_uri_handler(server_handle, &post_sta_connect_uri);
+    err = httpd_register_uri_handler(server_handle, &post_sta_connect_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register POST /api/network/sta/connect: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Registered POST /api/network/sta/connect");
+    }
 
     // POST /api/network/sta/disconnect
     httpd_uri_t post_sta_disconnect_uri = {.uri = "/api/network/sta/disconnect",
                                            .method = HTTP_POST,
                                            .handler = staDisconnectHandlerWrapper,
                                            .user_ctx = (void*)this};
-    httpd_register_uri_handler(server_handle, &post_sta_disconnect_uri);
+    err = httpd_register_uri_handler(server_handle, &post_sta_disconnect_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register POST /api/network/sta/disconnect: %s",
+                 esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Registered POST /api/network/sta/disconnect");
+    }
 
     // GET /api/network/status
     httpd_uri_t get_network_status_uri = {.uri = "/api/network/status",
                                           .method = HTTP_GET,
                                           .handler = networkStatusHandlerWrapper,
                                           .user_ctx = (void*)this};
-    httpd_register_uri_handler(server_handle, &get_network_status_uri);
+    err = httpd_register_uri_handler(server_handle, &get_network_status_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register GET /api/network/status: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Registered GET /api/network/status");
+    }
 }
 
 esp_err_t HttpServer::rootHandler(httpd_req_t* req) {
@@ -95,12 +136,11 @@ esp_err_t HttpServer::rootHandler(httpd_req_t* req) {
 
 // GET /api/device/info
 esp_err_t HttpServer::infoHandler(httpd_req_t* req) {
-    auto* server = static_cast<HttpServer*>(req->user_ctx);
+    DeviceInfo device_info = ConfigManager::getInstance().getDeviceInfo();
 
     cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "device_name", server->device_info.device_name);
-    cJSON_AddStringToObject(root, "firmware_version", server->device_info.firmware_version);
-    cJSON_AddNumberToObject(root, "last_boot_ts", 123456789);
+    cJSON_AddStringToObject(root, "device_name", device_info.device_name);
+    cJSON_AddStringToObject(root, "firmware_version", device_info.firmware_version);
 
     char* resp = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -114,31 +154,95 @@ esp_err_t HttpServer::infoHandler(httpd_req_t* req) {
 
 // PATCH /api/device/info
 esp_err_t HttpServer::patchDeviceInfoHandler(httpd_req_t* req) {
-    // For now just mock success JSON
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "status", "device info updated (mock)");
+    char buf[128];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data");
 
-    char* resp = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    buf[len] = '\0';
+    cJSON* json = cJSON_Parse(buf);
+    if (!json) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+
+    const cJSON* name = cJSON_GetObjectItem(json, "device_name");
+    if (!cJSON_IsString(name) || strlen(name->valuestring) >= DEVICE_NAME_MAX_LEN) {
+        cJSON_Delete(json);
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid device_name");
+    }
+
+    DeviceInfo device_info = ConfigManager::getInstance().getDeviceInfo();
+    strncpy(device_info.device_name, name->valuestring, DEVICE_NAME_MAX_LEN - 1);
+    device_info.device_name[DEVICE_NAME_MAX_LEN - 1] = '\0';
+    ConfigManager::getInstance().updateDeviceInfo(device_info);
+
+    cJSON* resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "status", "device name updated");
+
+    char* resp_str = cJSON_PrintUnformatted(resp);
+    cJSON_Delete(resp);
 
     httpd_resp_set_type(req, "application/json");
-    esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
-    free(resp);
+    esp_err_t ret = httpd_resp_send(req, resp_str, strlen(resp_str));
+    free(resp_str);
+    cJSON_Delete(json);
 
     return ret;
 }
 
-// POST /api/network/ap
+// POST /api/network/ap/set
 esp_err_t HttpServer::postApConfigHandler(httpd_req_t* req) {
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "status", "AP config updated (mock)");
+    char buf[256];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data");
 
-    char* resp = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    buf[len] = '\0';
+    cJSON* json = cJSON_Parse(buf);
+    if (!json) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+
+    NetworkConfig network_config = ConfigManager::getInstance().getNetworkConfig();
+
+    const cJSON* ssid = cJSON_GetObjectItem(json, "ap_ssid");
+    if (ssid) {
+        if (!cJSON_IsString(ssid) || strlen(ssid->valuestring) >= SSID_MAX_LEN) {
+            cJSON_Delete(json);
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid ap_ssid");
+        }
+        strncpy(network_config.ap_ssid, ssid->valuestring, SSID_MAX_LEN - 1);
+        network_config.ap_ssid[SSID_MAX_LEN - 1] = '\0';
+    }
+
+    const cJSON* password = cJSON_GetObjectItem(json, "ap_password");
+    if (cJSON_HasObjectItem(json, "ap_password")) {
+        if (cJSON_IsString(password)) {
+            if (strlen(password->valuestring) == 0) {
+                network_config.ap_password[0] = '\0';
+            } else {
+                strncpy(network_config.ap_password, password->valuestring, PASSWORD_MAX_LEN - 1);
+                network_config.ap_password[PASSWORD_MAX_LEN - 1] = '\0';
+            }
+        } else if (cJSON_IsNull(password)) {
+            network_config.ap_password[0] = '\0';
+        } else {
+            cJSON_Delete(json);
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid ap_password");
+        }
+    }
+
+    const cJSON* enabled = cJSON_GetObjectItem(json, "ap_enabled");
+    if (enabled && cJSON_IsBool(enabled)) {
+        network_config.ap_enabled = cJSON_IsTrue(enabled);
+    }
+
+    ConfigManager::getInstance().updateNetworkConfig(network_config);
+
+    cJSON* resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "status", "AP config updated");
+
+    char* resp_str = cJSON_PrintUnformatted(resp);
+    cJSON_Delete(resp);
 
     httpd_resp_set_type(req, "application/json");
-    esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
-    free(resp);
+    esp_err_t ret = httpd_resp_send(req, resp_str, strlen(resp_str));
+    free(resp_str);
+    cJSON_Delete(json);
 
     return ret;
 }
@@ -175,16 +279,17 @@ esp_err_t HttpServer::staDisconnectHandler(httpd_req_t* req) {
 
 // GET /api/network/status
 esp_err_t HttpServer::networkStatusHandler(httpd_req_t* req) {
+    NetworkConfig network_config = ConfigManager::getInstance().getNetworkConfig();
+
     cJSON* root = cJSON_CreateObject();
-    // mocked data
-    cJSON_AddStringToObject(root, "ssid", "MockSSID");
-    cJSON_AddStringToObject(root, "bssid", "AA:BB:CC:DD:EE:FF");
-    cJSON_AddStringToObject(root, "ip_address", "192.168.1.100");
-    cJSON_AddStringToObject(root, "mac_address", "11:22:33:44:55:66");
-    cJSON_AddStringToObject(root, "ap_ssid", "ESP32_default_AP");
-    cJSON_AddBoolToObject(root, "ap_enabled", true);
-    cJSON_AddBoolToObject(root, "sta_enabled", false);
-    cJSON_AddNumberToObject(root, "max_connections", 5);
+    cJSON_AddStringToObject(root, "ap_ssid", network_config.ap_ssid);
+    cJSON_AddBoolToObject(root, "ap_enabled", network_config.ap_enabled);
+    cJSON_AddStringToObject(root, "ap_password", network_config.ap_password);
+    cJSON_AddBoolToObject(root, "sta_enabled", network_config.sta_enabled);
+    cJSON_AddStringToObject(root, "ssid", network_config.ssid);
+    cJSON_AddStringToObject(root, "bssid", network_config.bssid);
+    cJSON_AddStringToObject(root, "ip_address", network_config.ip_address);
+    cJSON_AddStringToObject(root, "mac_address", network_config.mac_address);
 
     char* resp = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

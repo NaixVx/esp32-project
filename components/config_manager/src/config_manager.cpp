@@ -1,6 +1,7 @@
 #include "config_manager.hpp"
 
 #include <cstring>
+#include <mutex>
 
 #include "esp_log.h"
 #include "nvs.h"
@@ -10,7 +11,56 @@ static const char* TAG = "config_manager";
 constexpr const char* NVS_NAMESPACE = "storage";
 constexpr const char* NVS_KEY = "dev_config";
 
-esp_err_t ConfigManager::save(const DeviceConfig& config) {
+ConfigManager& ConfigManager::getInstance() {
+    static ConfigManager instance;
+    return instance;
+}
+
+ConfigManager::ConfigManager() {
+    if (loadFromNVS() != ESP_OK || !isValid()) {
+        ESP_LOGW(TAG, "Invalid or missing config, using defaults");
+        setDefaults();
+        saveToNVS();
+    } else {
+        ESP_LOGI(TAG, "Loaded valid config from NVS");
+    }
+}
+
+DeviceInfo ConfigManager::getDeviceInfo() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return config_.info;
+}
+
+void ConfigManager::updateDeviceInfo(const DeviceInfo& info) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_.info = info;
+    saveToNVS();
+}
+
+NetworkConfig ConfigManager::getNetworkConfig() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return config_.network;
+}
+
+void ConfigManager::updateNetworkConfig(const NetworkConfig& netConfig) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_.network = netConfig;
+    saveToNVS();
+}
+
+DeviceConfig ConfigManager::getConfig() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return config_;
+}
+
+void ConfigManager::updateConfig(const DeviceConfig& newConfig) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_ = newConfig;
+    saveToNVS();
+}
+
+esp_err_t ConfigManager::saveToNVS() {
+    std::lock_guard<std::mutex> lock(mutex_);
     ESP_LOGI(TAG, "Saving device config to NVS");
 
     nvs_handle_t nvs;
@@ -20,23 +70,24 @@ esp_err_t ConfigManager::save(const DeviceConfig& config) {
         return err;
     }
 
-    err = nvs_set_blob(nvs, NVS_KEY, &config, sizeof(config));
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set config blob: %s", esp_err_to_name(err));
-    } else {
+    err = nvs_set_blob(nvs, NVS_KEY, &config_, sizeof(config_));
+    if (err == ESP_OK) {
         err = nvs_commit(nvs);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to commit config: %s", esp_err_to_name(err));
-        } else {
+        if (err == ESP_OK) {
             ESP_LOGI(TAG, "Config saved successfully");
+        } else {
+            ESP_LOGE(TAG, "Failed to commit config: %s", esp_err_to_name(err));
         }
+    } else {
+        ESP_LOGE(TAG, "Failed to set config blob: %s", esp_err_to_name(err));
     }
 
     nvs_close(nvs);
     return err;
 }
 
-esp_err_t ConfigManager::load(DeviceConfig& config) {
+esp_err_t ConfigManager::loadFromNVS() {
+    std::lock_guard<std::mutex> lock(mutex_);
     ESP_LOGI(TAG, "Loading device config from NVS");
 
     nvs_handle_t nvs;
@@ -46,8 +97,8 @@ esp_err_t ConfigManager::load(DeviceConfig& config) {
         return err;
     }
 
-    size_t required_size = sizeof(config);
-    err = nvs_get_blob(nvs, NVS_KEY, &config, &required_size);
+    size_t required_size = sizeof(config_);
+    err = nvs_get_blob(nvs, NVS_KEY, &config_, &required_size);
     nvs_close(nvs);
 
     if (err == ESP_OK) {
@@ -59,33 +110,33 @@ esp_err_t ConfigManager::load(DeviceConfig& config) {
     return err;
 }
 
-void ConfigManager::setDefaults(DeviceConfig& config) {
+void ConfigManager::setDefaults() {
+    std::lock_guard<std::mutex> lock(mutex_);
     ESP_LOGW(TAG, "Setting default config");
-    std::memset(&config, 0, sizeof(config));
+
+    std::memset(&config_, 0, sizeof(config_));
 
     // Device Info
-    strcpy(config.info.device_name, "esp32-project");
-    strcpy(config.info.firmware_version, "0.001");
-    config.info.last_boot_ts = 0;
+    strcpy(config_.info.device_name, "esp32-project");
+    strcpy(config_.info.firmware_version, "0.001");
 
     // Network
-    strcpy(config.network.ap_ssid, "ESP32_default_AP");
-    config.network.ap_password[0] = '\0';
-    config.network.ap_enabled = true;
-    config.network.sta_enabled = false;
-    config.network.max_connections = 5;
-
-    config.networkStatus.ssid[0] = '\0';
-    config.networkStatus.bssid[0] = '\0';
-    config.networkStatus.ip_address[0] = '\0';
-    config.networkStatus.mac_address[0] = '\0';
+    strcpy(config_.network.ap_ssid, "ESP32_default_AP");
+    config_.network.ap_password[0] = 'secretPassword';
+    config_.network.ap_enabled = true;
+    config_.network.sta_enabled = false;
+    config_.network.ssid[0] = '\0';
+    config_.network.bssid[0] = '\0';
+    config_.network.ip_address[0] = '\0';
+    config_.network.mac_address[0] = '\0';
 }
 
-bool ConfigManager::isValid(const DeviceConfig& config) {
+bool ConfigManager::isValid() {
+    std::lock_guard<std::mutex> lock(mutex_);
     bool valid = true;
 
-    if (strlen(config.info.device_name) == 0 || strlen(config.info.firmware_version) == 0 ||
-        strlen(config.network.ap_ssid) == 0) {
+    if (strlen(config_.info.device_name) == 0 || strlen(config_.info.firmware_version) == 0 ||
+        strlen(config_.network.ap_ssid) == 0) {
         valid = false;
     }
 
