@@ -11,12 +11,22 @@ static const char* TAG = "config_manager";
 constexpr const char* NVS_NAMESPACE = "storage";
 constexpr const char* NVS_KEY = "dev_config";
 
+/**
+ * @brief Get singleton instance of ConfigManager
+ *
+ * @return Reference to the ConfigManager instance
+ */
 ConfigManager& ConfigManager::getInstance() {
     static ConfigManager instance;
     return instance;
 }
 
+/**
+ * @brief Private constructor that loads config from NVS or sets defaults
+ */
 ConfigManager::ConfigManager() {
+    ESP_LOGI(TAG, "Initializing ConfigManager");
+
     if (loadFromNVS() != ESP_OK || !isValid()) {
         ESP_LOGW(TAG, "Invalid or missing config, using defaults");
         setDefaults();
@@ -26,39 +36,80 @@ ConfigManager::ConfigManager() {
     }
 }
 
+/**
+ * @brief Get current device info
+ *
+ * @return DeviceInfo structure
+ */
 DeviceInfo ConfigManager::getDeviceInfo() {
     std::lock_guard<std::mutex> lock(mutex_);
+    ESP_LOGD(TAG, "Returning device info");
     return config_.info;
 }
 
+/**
+ * @brief Update device info and save to NVS
+ *
+ * @param info New device info
+ */
 void ConfigManager::updateDeviceInfo(const DeviceInfo& info) {
     std::lock_guard<std::mutex> lock(mutex_);
+    ESP_LOGI(TAG, "Updating device info: name=%s, fw=%s", info.device_name, info.firmware_version);
     config_.info = info;
     saveToNVS();
 }
 
+/**
+ * @brief Get current network configuration
+ *
+ * @return NetworkConfig structure
+ */
 NetworkConfig ConfigManager::getNetworkConfig() {
     std::lock_guard<std::mutex> lock(mutex_);
+    ESP_LOGD(TAG, "Returning network config");
     return config_.network;
 }
 
+/**
+ * @brief Update network configuration and save to NVS
+ *
+ * @param netConfig New network configuration
+ */
 void ConfigManager::updateNetworkConfig(const NetworkConfig& netConfig) {
     std::lock_guard<std::mutex> lock(mutex_);
+    ESP_LOGI(TAG, "Updating network config: AP=%s", netConfig.ap_ssid);
     config_.network = netConfig;
     saveToNVS();
 }
 
+/**
+ * @brief Get full device configuration
+ *
+ * @return DeviceConfig structure
+ */
 DeviceConfig ConfigManager::getConfig() {
     std::lock_guard<std::mutex> lock(mutex_);
+    ESP_LOGD(TAG, "Returning full config");
     return config_;
 }
 
+/**
+ * @brief Update full configuration and save to NVS
+ *
+ * @param newConfig New configuration
+ */
 void ConfigManager::updateConfig(const DeviceConfig& newConfig) {
     std::lock_guard<std::mutex> lock(mutex_);
+    ESP_LOGI(TAG, "Updating full config");
     config_ = newConfig;
     saveToNVS();
 }
 
+/**
+ * @brief Save current config to NVS
+ *
+ * @return esp_err_t ESP_OK on success or error code
+ */
 esp_err_t ConfigManager::saveToNVS() {
     std::lock_guard<std::mutex> lock(mutex_);
     ESP_LOGI(TAG, "Saving device config to NVS");
@@ -86,6 +137,11 @@ esp_err_t ConfigManager::saveToNVS() {
     return err;
 }
 
+/**
+ * @brief Load config from NVS
+ *
+ * @return esp_err_t ESP_OK on success or error code
+ */
 esp_err_t ConfigManager::loadFromNVS() {
     std::lock_guard<std::mutex> lock(mutex_);
     ESP_LOGI(TAG, "Loading device config from NVS");
@@ -110,6 +166,9 @@ esp_err_t ConfigManager::loadFromNVS() {
     return err;
 }
 
+/**
+ * @brief Set config to default values
+ */
 void ConfigManager::setDefaults() {
     std::lock_guard<std::mutex> lock(mutex_);
     ESP_LOGW(TAG, "Setting default config");
@@ -120,7 +179,7 @@ void ConfigManager::setDefaults() {
     strcpy(config_.info.device_name, "esp32-project");
     strcpy(config_.info.firmware_version, "0.001");
 
-    // Network
+    // Network defaults
     strcpy(config_.network.ap_ssid, "ESP32_default_AP");
     config_.network.ap_password[0] = '\0';
     config_.network.ap_enabled = true;
@@ -129,8 +188,15 @@ void ConfigManager::setDefaults() {
     config_.network.bssid[0] = '\0';
     config_.network.ip_address[0] = '\0';
     config_.network.mac_address[0] = '\0';
+
+    ESP_LOGI(TAG, "Default config set");
 }
 
+/**
+ * @brief Check if current config is valid
+ *
+ * @return true if valid, false otherwise
+ */
 bool ConfigManager::isValid() {
     std::lock_guard<std::mutex> lock(mutex_);
     bool valid = true;
