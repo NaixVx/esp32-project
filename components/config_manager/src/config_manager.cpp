@@ -122,7 +122,7 @@ void ConfigManager::setDefaults() {
 
     // Network
     strcpy(config_.network.ap_ssid, "ESP32_default_AP");
-    config_.network.ap_password[0] = 'secretPassword';
+    config_.network.ap_password[0] = '\0';
     config_.network.ap_enabled = true;
     config_.network.sta_enabled = false;
     config_.network.ssid[0] = '\0';

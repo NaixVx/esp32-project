@@ -28,5 +28,5 @@ extern "C" void app_main() {
     static HttpServer http_server(config.info);
     http_server.start();
 
-    DS18B20SensorManager::init(GPIO_NUM_4);
+    // DS18B20SensorManager::init(GPIO_NUM_4);
 }
