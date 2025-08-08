@@ -22,11 +22,11 @@ extern "C" void app_main() {
     DeviceConfig config = configManager.getConfig();
 
     // INIT WIFI & HTTP
-    static WiFiManager wifi(config.network);
-    wifi.startAP();
+    // static WiFiManager wifi(config.network);
+    // wifi.startAP();
 
-    static HttpServer http_server(config.info);
-    http_server.start();
+    // static HttpServer http_server(config.info);
+    // http_server.start();
 
     // DS18B20SensorManager::init(GPIO_NUM_4);
 }
