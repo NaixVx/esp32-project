@@ -4,3 +4,5 @@ sdkconfig
 sdkconfig.old
 sdkconfig.ci
 api_requests/
+
+.DS_Store
