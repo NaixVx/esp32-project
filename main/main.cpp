@@ -19,11 +19,17 @@ extern "C" void app_main() {
 
     // INIT CONFIG MANAGER
     ConfigManager& configManager = ConfigManager::getInstance();
-    DeviceConfig config = configManager.getConfig();
 
-    // INIT WIFI & HTTP
-    // static WiFiManager wifi(config.network);
-    // wifi.startAP();
+    // Initialize WiFiManager
+    static WiFiManager wifi;  // static ensures lifetime if observers persist
+    wifi.init();              // initialize ESP Wi-Fi stack
+
+    // Register WiFiManager as observer
+    configManager.registerNetworkObserver([](const NetworkConfig& netConfig) {
+        wifi.applyNetworkConfig(netConfig);  // capture static variable
+    });
+
+    wifi.applyNetworkConfig(configManager.getNetworkConfig());
 
     // static HttpServer http_server(config.info);
     // http_server.start();

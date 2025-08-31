@@ -1,6 +1,8 @@
 #pragma once
 
+#include <functional>
 #include <mutex>
+#include <vector>
 
 #include "esp_err.h"
 
@@ -53,71 +55,36 @@ class ConfigManager {
     static ConfigManager& getInstance();
 
     // === Full config ===
-
-    /**
-     * @brief Retrieve the current full device configuration.
-     * @return DeviceConfig structure
-     */
     DeviceConfig getConfig();
-
-    /**
-     * @brief Update the entire device configuration.
-     * @param config New configuration to store
-     */
     void updateConfig(const DeviceConfig& config);
 
     // === Device Info ===
-
-    /**
-     * @brief Get stored device information.
-     * @return DeviceInfo structure
-     */
     DeviceInfo getDeviceInfo();
-
-    /**
-     * @brief Update and save device information.
-     * @param info New device info to store
-     */
     void updateDeviceInfo(const DeviceInfo& info);
 
     // === Network Config ===
-
-    /**
-     * @brief Get stored network configuration.
-     * @return NetworkConfig structure
-     */
     NetworkConfig getNetworkConfig();
-
-    /**
-     * @brief Update and save network configuration.
-     * @param netConfig New network configuration
-     */
     void updateNetworkConfig(const NetworkConfig& netConfig);
 
     // === Internal Operations ===
-
-    /**
-     * @brief Load configuration from NVS.
-     * @return ESP_OK on success, or error code
-     */
     esp_err_t loadFromNVS();
-
-    /**
-     * @brief Save current configuration to NVS.
-     * @return ESP_OK on success, or error code
-     */
     esp_err_t saveToNVS();
-
-    /**
-     * @brief Reset configuration to default values.
-     */
     void setDefaults();
+    bool isValid();
+
+    // === Observers ===
+    using NetworkObserver = std::function<void(const NetworkConfig&)>;
+    using DeviceInfoObserver = std::function<void(const DeviceInfo&)>;
 
     /**
-     * @brief Validate current configuration contents.
-     * @return true if config is valid, false otherwise
+     * @brief Register a callback to be notified when network config changes.
      */
-    bool isValid();
+    void registerNetworkObserver(NetworkObserver obs);
+
+    /**
+     * @brief Register a callback to be notified when device info changes.
+     */
+    void registerDeviceInfoObserver(DeviceInfoObserver obs);
 
    private:
     /**
@@ -127,4 +94,7 @@ class ConfigManager {
 
     DeviceConfig config_;  ///< Internal storage for current config
     std::mutex mutex_;     ///< Mutex to protect concurrent access
+
+    std::vector<NetworkObserver> network_observers_;  ///< List of network observers
+    std::vector<DeviceInfoObserver> info_observers_;  ///< List of device info observers
 };

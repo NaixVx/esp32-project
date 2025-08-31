@@ -1,7 +1,6 @@
 #include "config_manager.hpp"
 
 #include <cstring>
-#include <mutex>
 
 #include "esp_log.h"
 #include "nvs.h"
@@ -11,19 +10,11 @@ static const char* TAG = "config_manager";
 constexpr const char* NVS_NAMESPACE = "storage";
 constexpr const char* NVS_KEY = "dev_config";
 
-/**
- * @brief Get singleton instance of ConfigManager
- *
- * @return Reference to the ConfigManager instance
- */
 ConfigManager& ConfigManager::getInstance() {
     static ConfigManager instance;
     return instance;
 }
 
-/**
- * @brief Private constructor that loads config from NVS or sets defaults
- */
 ConfigManager::ConfigManager() {
     ESP_LOGI(TAG, "Initializing ConfigManager");
 
@@ -36,80 +27,81 @@ ConfigManager::ConfigManager() {
     }
 }
 
-/**
- * @brief Get current device info
- *
- * @return DeviceInfo structure
- */
 DeviceInfo ConfigManager::getDeviceInfo() {
     std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGD(TAG, "Returning device info");
     return config_.info;
 }
 
-/**
- * @brief Update device info and save to NVS
- *
- * @param info New device info
- */
 void ConfigManager::updateDeviceInfo(const DeviceInfo& info) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGI(TAG, "Updating device info: name=%s, fw=%s", info.device_name, info.firmware_version);
-    config_.info = info;
-    saveToNVS();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ESP_LOGI(TAG, "Updating device info: name=%s, fw=%s", info.device_name,
+                 info.firmware_version);
+        config_.info = info;
+    }
+
+    if (saveToNVS() == ESP_OK) {
+        // Notify observers
+        DeviceInfo snapshot;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            snapshot = config_.info;
+        }
+        std::vector<DeviceInfoObserver> observers_copy;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            observers_copy = info_observers_;
+        }
+        for (auto& obs : observers_copy) {
+            if (obs) obs(snapshot);
+        }
+    }
 }
 
-/**
- * @brief Get current network configuration
- *
- * @return NetworkConfig structure
- */
 NetworkConfig ConfigManager::getNetworkConfig() {
     std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGD(TAG, "Returning network config");
     return config_.network;
 }
 
-/**
- * @brief Update network configuration and save to NVS
- *
- * @param netConfig New network configuration
- */
 void ConfigManager::updateNetworkConfig(const NetworkConfig& netConfig) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGI(TAG, "Updating network config: AP=%s", netConfig.ap_ssid);
-    config_.network = netConfig;
-    saveToNVS();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ESP_LOGI(TAG, "Updating network config: AP=%s", netConfig.ap_ssid);
+        config_.network = netConfig;
+    }
+
+    if (saveToNVS() == ESP_OK) {
+        // Notify observers
+        NetworkConfig snapshot;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            snapshot = config_.network;
+        }
+        std::vector<NetworkObserver> observers_copy;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            observers_copy = network_observers_;
+        }
+        for (auto& obs : observers_copy) {
+            if (obs) obs(snapshot);
+        }
+    }
 }
 
-/**
- * @brief Get full device configuration
- *
- * @return DeviceConfig structure
- */
 DeviceConfig ConfigManager::getConfig() {
     std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGD(TAG, "Returning full config");
     return config_;
 }
 
-/**
- * @brief Update full configuration and save to NVS
- *
- * @param newConfig New configuration
- */
 void ConfigManager::updateConfig(const DeviceConfig& newConfig) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGI(TAG, "Updating full config");
-    config_ = newConfig;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        config_ = newConfig;
+    }
     saveToNVS();
+    // NOTE: you could also notify both observers here if needed
 }
 
-/**
- * @brief Save current config to NVS
- *
- * @return esp_err_t ESP_OK on success or error code
- */
 esp_err_t ConfigManager::saveToNVS() {
     std::lock_guard<std::mutex> lock(mutex_);
     ESP_LOGI(TAG, "Saving device config to NVS");
@@ -137,11 +129,6 @@ esp_err_t ConfigManager::saveToNVS() {
     return err;
 }
 
-/**
- * @brief Load config from NVS
- *
- * @return esp_err_t ESP_OK on success or error code
- */
 esp_err_t ConfigManager::loadFromNVS() {
     std::lock_guard<std::mutex> lock(mutex_);
     ESP_LOGI(TAG, "Loading device config from NVS");
@@ -166,20 +153,13 @@ esp_err_t ConfigManager::loadFromNVS() {
     return err;
 }
 
-/**
- * @brief Set config to default values
- */
 void ConfigManager::setDefaults() {
     std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGW(TAG, "Setting default config");
-
     std::memset(&config_, 0, sizeof(config_));
 
-    // Device Info
     strcpy(config_.info.device_name, "esp32-project");
     strcpy(config_.info.firmware_version, "0.001");
 
-    // Network defaults
     strcpy(config_.network.ap_ssid, "ESP32_default_AP");
     config_.network.ap_password[0] = '\0';
     config_.network.ap_enabled = true;
@@ -188,29 +168,24 @@ void ConfigManager::setDefaults() {
     config_.network.bssid[0] = '\0';
     config_.network.ip_address[0] = '\0';
     config_.network.mac_address[0] = '\0';
-
-    ESP_LOGI(TAG, "Default config set");
 }
 
-/**
- * @brief Check if current config is valid
- *
- * @return true if valid, false otherwise
- */
 bool ConfigManager::isValid() {
     std::lock_guard<std::mutex> lock(mutex_);
-    bool valid = true;
-
     if (strlen(config_.info.device_name) == 0 || strlen(config_.info.firmware_version) == 0 ||
         strlen(config_.network.ap_ssid) == 0) {
-        valid = false;
+        return false;
     }
+    return true;
+}
 
-    if (!valid) {
-        ESP_LOGW(TAG, "Config validation failed");
-    } else {
-        ESP_LOGI(TAG, "Config validation passed");
-    }
+// ---- New observer registration functions ----
+void ConfigManager::registerNetworkObserver(NetworkObserver obs) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    network_observers_.push_back(std::move(obs));
+}
 
-    return valid;
+void ConfigManager::registerDeviceInfoObserver(DeviceInfoObserver obs) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    info_observers_.push_back(std::move(obs));
 }
