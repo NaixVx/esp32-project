@@ -9,7 +9,7 @@
 #include "wifi_manager.hpp"
 
 extern "C" void app_main() {
-    // INIT NVS
+    // --- INIT NVS ---
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -17,21 +17,15 @@ extern "C" void app_main() {
     }
     ESP_ERROR_CHECK(ret);
 
-    // INIT CONFIG MANAGER
+    // --- INIT CONFIG MANAGER ---
     ConfigManager& configManager = ConfigManager::getInstance();
 
-    // Initialize WiFiManager
-    static WiFiManager wifi;  // static ensures lifetime if observers persist
+    // --- INIT WIFI MANAGER ---
+    static WiFiManager wifi;  // static ensures lifetime for observer
     wifi.init();              // initialize ESP Wi-Fi stack
 
-    // Register WiFiManager as observer
-    configManager.registerNetworkObserver([](const NetworkConfig& netConfig) {
-        wifi.applyNetworkConfig(netConfig);  // capture static variable
-    });
-
-    wifi.applyNetworkConfig(configManager.getNetworkConfig());
-
-    // static HttpServer http_server(config.info);
+    // --- OTHER COMPONENTS ---
+    // static HttpServer http_server(configManager.getDeviceInfo());
     // http_server.start();
 
     // DS18B20SensorManager::init(GPIO_NUM_4);

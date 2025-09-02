@@ -8,89 +8,112 @@ static const char* TAG = "wifi_manager";
 WiFiManager::WiFiManager() {
     std::memset(_current_ap_ssid, 0, sizeof(_current_ap_ssid));
     std::memset(_current_ap_pass, 0, sizeof(_current_ap_pass));
+
+    _mutex = xSemaphoreCreateMutex();
+    if (!_mutex) {
+        ESP_LOGE(TAG, "Failed to create WiFiManager mutex!");
+        abort();
+    }
 }
 
+WiFiManager::~WiFiManager() {
+    if (_mutex) {
+        vSemaphoreDelete(_mutex);
+    }
+}
+
+// ---------------- Wi-Fi Init ----------------
 void WiFiManager::init() {
-    std::lock_guard<std::mutex> lock(_mutex);
     static bool wifi_initialized = false;
-    if (wifi_initialized) return;
 
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_ap();
+    {
+        LockGuard guard(_mutex);
+        if (wifi_initialized) return;
 
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                                               &WiFiManager::onWiFiEvent, nullptr));
+        ESP_ERROR_CHECK(esp_netif_init());
+        ESP_ERROR_CHECK(esp_event_loop_create_default());
+        esp_netif_create_default_wifi_ap();
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+        ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                                   &WiFiManager::onWiFiEvent, nullptr));
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
 
-    wifi_initialized = true;
-    ESP_LOGI(TAG, "Wi-Fi stack initialized");
+        ConfigManager::getInstance().registerNetworkObserver(
+            [this](const NetworkConfig& netConfig) { this->updateNetworkConfig(netConfig); });
+
+        wifi_initialized = true;
+    }
+
+    // Apply current config at startup (outside lock)
+    updateNetworkConfig(ConfigManager::getInstance().getNetworkConfig());
+    ESP_LOGI(TAG, "Wi-Fi stack initialized and observer registered");
 }
 
 // ---------------- Start AP ----------------
 void WiFiManager::startAP() {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (_ap_running) return;
+    char ap_ssid[SSID_MAX_LEN];
+    char ap_pass[PASSWORD_MAX_LEN];
+
+    {
+        LockGuard guard(_mutex);
+        if (_ap_running) return;
+
+        std::strncpy(ap_ssid, _current_ap_ssid, sizeof(ap_ssid));
+        std::strncpy(ap_pass, _current_ap_pass, sizeof(ap_pass));
+        _ap_running = true;
+    }
 
     ESP_LOGI(TAG, "Starting Wi-Fi AP...");
-
     wifi_config_t ap_config = {};
-    strncpy((char*)ap_config.ap.ssid, _current_ap_ssid, sizeof(ap_config.ap.ssid));
-    ap_config.ap.ssid[sizeof(ap_config.ap.ssid) - 1] = '\0';
-
-    strncpy((char*)ap_config.ap.password, _current_ap_pass, sizeof(ap_config.ap.password));
-    ap_config.ap.password[sizeof(ap_config.ap.password) - 1] = '\0';
-
-    ap_config.ap.ssid_len = strlen(_current_ap_ssid);
+    strncpy((char*)ap_config.ap.ssid, ap_ssid, sizeof(ap_config.ap.ssid));
+    ap_config.ap.ssid_len = strlen(ap_ssid);
+    strncpy((char*)ap_config.ap.password, ap_pass, sizeof(ap_config.ap.password));
     ap_config.ap.max_connection = 4;
-    ap_config.ap.authmode = strlen(_current_ap_pass) > 0 ? WIFI_AUTH_WPA_WPA2_PSK : WIFI_AUTH_OPEN;
+    ap_config.ap.authmode = strlen(ap_pass) > 0 ? WIFI_AUTH_WPA_WPA2_PSK : WIFI_AUTH_OPEN;
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    _ap_running = true;
-    ESP_LOGI(TAG, "AP started: SSID=%s", _current_ap_ssid);
+    ESP_LOGI(TAG, "AP started: SSID=%s", ap_ssid);
     logApIp();
 }
 
 // ---------------- Stop AP ----------------
 void WiFiManager::stopAP() {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (!_ap_running) return;
+    bool was_running = false;
 
-    ESP_ERROR_CHECK(esp_wifi_stop());
-    _ap_running = false;
-    ESP_LOGI(TAG, "AP stopped");
+    {
+        LockGuard guard(_mutex);
+        was_running = _ap_running;
+        _ap_running = false;
+    }
+
+    if (was_running) {
+        ESP_ERROR_CHECK(esp_wifi_stop());
+        ESP_LOGI(TAG, "AP stopped");
+    }
 }
 
 // ---------------- Apply network config ----------------
-void WiFiManager::applyNetworkConfig(const NetworkConfig& netConfig) {
+void WiFiManager::updateNetworkConfig(const NetworkConfig& netConfig) {
     bool ssid_changed = false;
     bool pass_changed = false;
 
-    // Copy new config under lock
     {
-        std::lock_guard<std::mutex> lock(_mutex);
-
+        LockGuard guard(_mutex);
         ssid_changed = strcmp(_current_ap_ssid, netConfig.ap_ssid) != 0;
         pass_changed = strcmp(_current_ap_pass, netConfig.ap_password) != 0;
 
         if (ssid_changed || pass_changed) {
-            ESP_LOGI(TAG, "Network config changed, updating AP...");
-
-            strncpy(_current_ap_ssid, netConfig.ap_ssid, sizeof(_current_ap_ssid));
-            _current_ap_ssid[sizeof(_current_ap_ssid) - 1] = '\0';
-
-            strncpy(_current_ap_pass, netConfig.ap_password, sizeof(_current_ap_pass));
-            _current_ap_pass[sizeof(_current_ap_pass) - 1] = '\0';
+            std::strncpy(_current_ap_ssid, netConfig.ap_ssid, sizeof(_current_ap_ssid));
+            std::strncpy(_current_ap_pass, netConfig.ap_password, sizeof(_current_ap_pass));
         }
     }
 
-    // Restart AP outside lock to avoid deadlock
+    // Restart AP outside lock
     if (ssid_changed || pass_changed) {
         if (_ap_running) stopAP();
         startAP();
