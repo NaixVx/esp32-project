@@ -1,8 +1,62 @@
-BasedOnStyle: Google
+# .clang-format — ESP32 Project Style (C/C++)
+BasedOnStyle: LLVM
+
+# === General Formatting ===
 IndentWidth: 4
+TabWidth: 4
+UseTab: Never
 ColumnLimit: 100
-AllowShortFunctionsOnASingleLine: Empty
-DerivePointerAlignment: false
 PointerAlignment: Left
+DerivePointerAlignment: false
+ReflowComments: false
+SortIncludes: false               # Keep your include order as-is
+IncludeBlocks: Preserve
+
+# === Compact but Readable Layout ===
+AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortEnumsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Inline
+AllowShortCaseLabelsOnASingleLine: false
+
+# === Function / Argument Layout ===
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AlignAfterOpenBracket: DontAlign
+
+# === Braces & Lists ===
+BreakBeforeBraces: Linux
+BraceWrapping:
+  AfterEnum: true
+  AfterStruct: true
+  AfterFunction: true
+  SplitEmptyFunction: true
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+Cpp11BracedListStyle: true
+AllowShortBracedListsOnASingleLine: false
+
+# === Spacing ===
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
+
+# === Penalties / Line Breaks ===
+PenaltyBreakBeforeFirstCallParameter: 100
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 1000000
+
+---
 Language: Cpp
-Standard: c++17
+# (C++-specific adjustments if needed later)
+
+---
+Language: C
+# C generally inherits from the Cpp section
