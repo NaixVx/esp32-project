@@ -10,84 +10,101 @@
 #include "freertos/semphr.h"
 #include "utils/lock_guard.hpp"
 
-// --- Limits ---
+// ---- Limits ----
 #define DEVICE_NAME_MAX_LEN 32
+#define DEVICE_TYPE_MAX_LEN 16
 #define FW_VERSION_MAX_LEN 16
 #define SSID_MAX_LEN 32
 #define PASSWORD_MAX_LEN 64
-#define MAC_ADDR_LEN 18  // "AA:BB:CC:DD:EE:FF" + '\0'
-#define IP_ADDR_LEN 16   // "255.255.255.255" + '\0'
+#define MAC_ADDR_LEN 18 // "AA:BB:CC:DD:EE:FF" + '\0'
+#define IP_ADDR_LEN 16  // "255.255.255.255" + '\0'
+#define ID_MAX_LEN 16
 
-// --- Persisted layout helpers ---
+// ---- Persisted layout helpers ----
 struct ConfigHeader {
-    uint16_t version = 1;      // bump when the on-flash schema changes
-    uint16_t struct_size = 0;  // sizeof(DeviceConfig) at time of save
+    uint16_t version = 1;     // bump when the on-flash schema changes
+    uint16_t struct_size = 0; // sizeof(PersistedConfig) at time of save
 };
 
 struct DeviceInfo {
+    char id[ID_MAX_LEN];
     char device_name[DEVICE_NAME_MAX_LEN];
+    char device_type[DEVICE_TYPE_MAX_LEN];
     char firmware_version[FW_VERSION_MAX_LEN];
 };
 
-struct NetworkConfig {
-    char ap_ssid[SSID_MAX_LEN];
-    char ap_password[PASSWORD_MAX_LEN];
+struct NetworkPrivateConfig {
+    char sta_ssid[SSID_MAX_LEN];
+    char sta_password[PASSWORD_MAX_LEN];
 
     uint8_t ap_enabled;
-    uint8_t sta_enabled;
-    uint8_t _pad0[2] = {0};
+    uint8_t _pad[3];
 
-    char ssid[SSID_MAX_LEN];         // STA SSID (if sta_enabled)
-    char bssid[MAC_ADDR_LEN];        // optional, as "AA:BB:CC:DD:EE:FF"
-    char ip_address[IP_ADDR_LEN];    // optional static IP, dotted quad
-    char mac_address[MAC_ADDR_LEN];  // device MAC, as string
+    char ap_ssid[SSID_MAX_LEN];
+    char ap_password[PASSWORD_MAX_LEN];
 };
 
-struct DeviceConfig {
+struct NetworkPublicConfig {
+    char mac_address[MAC_ADDR_LEN];
+
+    uint8_t sta_connected;
+    uint8_t ap_active;
+    uint8_t _pad[2];
+
+    char sta_ssid[SSID_MAX_LEN];
+    char sta_ip[IP_ADDR_LEN];
+
+    char ap_ssid[SSID_MAX_LEN];
+    char ap_ip[IP_ADDR_LEN];
+};
+
+struct PersistedConfig {
     ConfigHeader header{};
     DeviceInfo info{};
-    NetworkConfig network{};
+    NetworkPrivateConfig network_private{};
 };
 
-static_assert(sizeof(ConfigHeader) == 4, "ConfigHeader unexpected padding");
+// ---- Layout guarantees ----
+static_assert(sizeof(ConfigHeader) % 4 == 0, "ConfigHeader unexpected padding");
+static_assert(sizeof(DeviceInfo) % 4 == 0, "DeviceInfo not 4-byte aligned");
+static_assert(sizeof(NetworkPrivateConfig) % 4 == 0, "NetworkPrivateConfig not 4-byte aligned");
+static_assert(sizeof(PersistedConfig) % 4 == 0, "PersistedConfig not 4-byte aligned");
 
-// --- Manager ---
-class ConfigManager {
-   public:
+// ---- Manager ----
+class ConfigManager
+{
+  public:
     static ConfigManager& getInstance();
 
-    // Accessors (return copies to keep internal state encapsulated)
-    DeviceConfig getConfig();
     DeviceInfo getDeviceInfo();
-    NetworkConfig getNetworkConfig();
+    NetworkPrivateConfig getNetworkPrivateConfig();
 
-    // Mutators report status. Observers fire only on ESP_OK save.
-    esp_err_t updateConfig(const DeviceConfig& config);
     esp_err_t updateDeviceInfo(const DeviceInfo& info);
-    esp_err_t updateNetworkConfig(const NetworkConfig& netConfig);
+    esp_err_t updateNetworkPrivateConfig(const NetworkPrivateConfig& net);
 
-    // Persistence
+    NetworkPublicConfig getNetworkPublicConfig();
+    void updateNetworkPublicConfig(const NetworkPublicConfig& net);
+
     esp_err_t loadFromNVS();
     esp_err_t saveToNVS();
 
-    // Defaults / validation
-    void setDefaults();           // set in-memory defaults (no save)
-    esp_err_t resetToDefaults();  // set defaults and persist
-    bool isValid();               // validates current in-memory config
+    void setDefaults();
+    esp_err_t resetToDefaults();
+    bool isValid();
 
-    // Observability
-    using NetworkObserver = std::function<void(const NetworkConfig&)>;
+    using NetworkObserver = std::function<void(const NetworkPublicConfig&)>;
     using DeviceInfoObserver = std::function<void(const DeviceInfo&)>;
 
     void registerNetworkObserver(NetworkObserver obs);
     void registerDeviceInfoObserver(DeviceInfoObserver obs);
 
-   private:
+  private:
     ConfigManager();
     ~ConfigManager();
 
-    // internal state
-    DeviceConfig config_{};
+    PersistedConfig persisted_{};
+    NetworkPublicConfig network_public_{};
+
     SemaphoreHandle_t mutex_{nullptr};
 
     std::vector<NetworkObserver> network_observers_;
