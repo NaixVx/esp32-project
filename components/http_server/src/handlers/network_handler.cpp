@@ -1,5 +1,7 @@
 #include "handlers/network_handler.hpp"
 
+#include "utils/http_utils.hpp"
+
 #include "cJSON.h"
 #include "config_manager.hpp"
 #include "esp_http_server.h"
@@ -15,41 +17,12 @@ static inline void set_json_headers(httpd_req_t* req)
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 }
 
-static bool read_body_into(httpd_req_t* req, char* dst, size_t dst_size, int* out_len)
-{
-    size_t total = req->content_len;
-    if (dst_size == 0)
-        return false;
-    size_t to_read = total;
-    size_t written = 0;
-    while (to_read > 0) {
-        int chunk = httpd_req_recv(req, dst + written, std::min(to_read, dst_size - 1 - written));
-        if (chunk <= 0)
-            return false;
-        written += chunk;
-        to_read -= chunk;
-        if (written >= dst_size - 1)
-            break;
-    }
-    dst[written] = '\0';
-    if (out_len)
-        *out_len = (int)written;
-    while (to_read > 0) {
-        char junk[64];
-        int chunk = httpd_req_recv(req, junk, std::min<size_t>(to_read, sizeof(junk)));
-        if (chunk <= 0)
-            break;
-        to_read -= chunk;
-    }
-    return true;
-}
-
 // POST /api/network/ap/set
 static esp_err_t postApConfigHandler(httpd_req_t* req)
 {
     char buf[384];
     int len = 0;
-    if (!read_body_into(req, buf, sizeof(buf), &len) || len <= 0) {
+    if (!http_read_body(req, buf, sizeof(buf), &len) || len <= 0) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data");
     }
 
@@ -57,7 +30,7 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
     if (!json)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
 
-    NetworkConfig network_config = ConfigManager::getInstance().getNetworkConfig();
+    NetworkPrivateConfig network_config = ConfigManager::getInstance().getNetworkPrivateConfig();
 
     const cJSON* ssid = cJSON_GetObjectItem(json, "ap_ssid");
     if (ssid) {
@@ -92,7 +65,7 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
         network_config.ap_enabled = cJSON_IsTrue(enabled) ? 1 : 0; // uint8_t
     }
 
-    esp_err_t err = ConfigManager::getInstance().updateNetworkConfig(network_config);
+    esp_err_t err = ConfigManager::getInstance().updateNetworkPrivateConfig(network_config);
 
     cJSON* resp = cJSON_CreateObject();
     if (err == ESP_OK) {
@@ -112,83 +85,83 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
     return ret;
 }
 
-// POST /api/network/sta/connect (enable STA + set SSID optionally)
-static esp_err_t staConnectHandler(httpd_req_t* req)
-{
-    // body is optional: { "ssid": "MyWiFi" }
-    char buf[256];
-    int len = 0;
-    read_body_into(req, buf, sizeof(buf), &len);
-    cJSON* json = len > 0 ? cJSON_Parse(buf) : nullptr;
+// // POST /api/network/sta/connect (enable STA + set SSID optionally)
+// static esp_err_t staConnectHandler(httpd_req_t* req)
+// {
+//     // body is optional: { "ssid": "MyWiFi" }
+//     char buf[256];
+//     int len = 0;
+//     read_body_into(req, buf, sizeof(buf), &len);
+//     cJSON* json = len > 0 ? cJSON_Parse(buf) : nullptr;
 
-    NetworkConfig cfg = ConfigManager::getInstance().getNetworkConfig();
-    if (json) {
-        const cJSON* ssid = cJSON_GetObjectItem(json, "ssid");
-        if (ssid) {
-            if (!cJSON_IsString(ssid) || strlen(ssid->valuestring) >= SSID_MAX_LEN) {
-                cJSON_Delete(json);
-                return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid ssid");
-            }
-            strncpy(cfg.ssid, ssid->valuestring, SSID_MAX_LEN - 1);
-            cfg.ssid[SSID_MAX_LEN - 1] = '\0';
-        }
-        cJSON_Delete(json);
-    }
-    cfg.sta_enabled = 1;
-    esp_err_t err = ConfigManager::getInstance().updateNetworkConfig(cfg);
+//     NetworkConfig cfg = ConfigManager::getInstance().getNetworkConfig();
+//     if (json) {
+//         const cJSON* ssid = cJSON_GetObjectItem(json, "ssid");
+//         if (ssid) {
+//             if (!cJSON_IsString(ssid) || strlen(ssid->valuestring) >= SSID_MAX_LEN) {
+//                 cJSON_Delete(json);
+//                 return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid ssid");
+//             }
+//             strncpy(cfg.ssid, ssid->valuestring, SSID_MAX_LEN - 1);
+//             cfg.ssid[SSID_MAX_LEN - 1] = '\0';
+//         }
+//         cJSON_Delete(json);
+//     }
+//     cfg.sta_enabled = 1;
+//     esp_err_t err = ConfigManager::getInstance().updateNetworkConfig(cfg);
 
-    cJSON* root = cJSON_CreateObject();
-    if (err == ESP_OK)
-        cJSON_AddStringToObject(root, "status", "STA connect requested");
-    else {
-        cJSON_AddStringToObject(root, "status", "failed to update");
-        cJSON_AddStringToObject(root, "error", esp_err_to_name(err));
-    }
-    char* resp = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+//     cJSON* root = cJSON_CreateObject();
+//     if (err == ESP_OK)
+//         cJSON_AddStringToObject(root, "status", "STA connect requested");
+//     else {
+//         cJSON_AddStringToObject(root, "status", "failed to update");
+//         cJSON_AddStringToObject(root, "error", esp_err_to_name(err));
+//     }
+//     char* resp = cJSON_PrintUnformatted(root);
+//     cJSON_Delete(root);
 
-    set_json_headers(req);
-    esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
-    free(resp);
-    return ret;
-}
+//     set_json_headers(req);
+//     esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
+//     free(resp);
+//     return ret;
+// }
 
-// POST /api/network/sta/disconnect (disable STA)
-static esp_err_t staDisconnectHandler(httpd_req_t* req)
-{
-    NetworkConfig cfg = ConfigManager::getInstance().getNetworkConfig();
-    cfg.sta_enabled = 0;
-    esp_err_t err = ConfigManager::getInstance().updateNetworkConfig(cfg);
+// // POST /api/network/sta/disconnect (disable STA)
+// static esp_err_t staDisconnectHandler(httpd_req_t* req)
+// {
+//     NetworkConfig cfg = ConfigManager::getInstance().getNetworkConfig();
+//     cfg.sta_enabled = 0;
+//     esp_err_t err = ConfigManager::getInstance().updateNetworkConfig(cfg);
 
-    cJSON* root = cJSON_CreateObject();
-    if (err == ESP_OK)
-        cJSON_AddStringToObject(root, "status", "STA disconnect requested");
-    else {
-        cJSON_AddStringToObject(root, "status", "failed to update");
-        cJSON_AddStringToObject(root, "error", esp_err_to_name(err));
-    }
-    char* resp = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+//     cJSON* root = cJSON_CreateObject();
+//     if (err == ESP_OK)
+//         cJSON_AddStringToObject(root, "status", "STA disconnect requested");
+//     else {
+//         cJSON_AddStringToObject(root, "status", "failed to update");
+//         cJSON_AddStringToObject(root, "error", esp_err_to_name(err));
+//     }
+//     char* resp = cJSON_PrintUnformatted(root);
+//     cJSON_Delete(root);
 
-    set_json_headers(req);
-    esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
-    free(resp);
-    return ret;
-}
+//     set_json_headers(req);
+//     esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
+//     free(resp);
+//     return ret;
+// }
 
 // GET /api/network/status
 static esp_err_t networkStatusHandler(httpd_req_t* req)
 {
-    NetworkConfig n = ConfigManager::getInstance().getNetworkConfig();
+    NetworkPublicConfig n = ConfigManager::getInstance().getNetworkPublicConfig();
 
     cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "ap_ssid", n.ap_ssid);
-    cJSON_AddBoolToObject(root, "ap_enabled", n.ap_enabled != 0);
-    cJSON_AddBoolToObject(root, "sta_enabled", n.sta_enabled != 0);
-    cJSON_AddStringToObject(root, "ssid", n.ssid);
-    cJSON_AddStringToObject(root, "bssid", n.bssid);
-    cJSON_AddStringToObject(root, "ip_address", n.ip_address);
     cJSON_AddStringToObject(root, "mac_address", n.mac_address);
+    cJSON_AddBoolToObject(root, "ap_active", n.ap_active != 0);
+    cJSON_AddStringToObject(root, "ap_ssid", n.ap_ssid);
+    cJSON_AddStringToObject(root, "ap_ip", n.ap_ip);
+    cJSON_AddBoolToObject(root, "sta_connected", n.sta_connected != 0);
+    cJSON_AddStringToObject(root, "sta_ssid", n.sta_ssid);
+    cJSON_AddStringToObject(root, "sta_ip", n.sta_ip);
 
     char* resp = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -232,29 +205,29 @@ void Handlers::registerNetworkEndpoints(httpd_handle_t server, void* ctx)
     else
         ESP_LOGE(TAG, "Failed to register POST /api/network/ap/set: %s", esp_err_to_name(err));
 
-    // POST /api/network/sta/connect
-    httpd_uri_t post_sta_connect_uri = {.uri = "/api/network/sta/connect",
-        .method = HTTP_POST,
-        .handler = staConnectHandler,
-        .user_ctx = ctx};
-    err = httpd_register_uri_handler(server, &post_sta_connect_uri);
-    if (err == ESP_OK)
-        ESP_LOGI(TAG, "Registered POST /api/network/sta/connect");
-    else
-        ESP_LOGE(TAG, "Failed to register POST /api/network/sta/connect: %s", esp_err_to_name(err));
+    // // POST /api/network/sta/connect
+    // httpd_uri_t post_sta_connect_uri = {.uri = "/api/network/sta/connect",
+    //     .method = HTTP_POST,
+    //     .handler = staConnectHandler,
+    //     .user_ctx = ctx};
+    // err = httpd_register_uri_handler(server, &post_sta_connect_uri);
+    // if (err == ESP_OK)
+    //     ESP_LOGI(TAG, "Registered POST /api/network/sta/connect");
+    // else
+    //     ESP_LOGE(TAG, "Failed to register POST /api/network/sta/connect: %s", esp_err_to_name(err));
 
-    // POST /api/network/sta/disconnect
-    httpd_uri_t post_sta_disconnect_uri = {.uri = "/api/network/sta/disconnect",
-        .method = HTTP_POST,
-        .handler = staDisconnectHandler,
-        .user_ctx = ctx};
-    err = httpd_register_uri_handler(server, &post_sta_disconnect_uri);
-    if (err == ESP_OK)
-        ESP_LOGI(TAG, "Registered POST /api/network/sta/disconnect");
-    else
-        ESP_LOGE(TAG,
-            "Failed to register POST /api/network/sta/disconnect: %s",
-            esp_err_to_name(err));
+    // // POST /api/network/sta/disconnect
+    // httpd_uri_t post_sta_disconnect_uri = {.uri = "/api/network/sta/disconnect",
+    //     .method = HTTP_POST,
+    //     .handler = staDisconnectHandler,
+    //     .user_ctx = ctx};
+    // err = httpd_register_uri_handler(server, &post_sta_disconnect_uri);
+    // if (err == ESP_OK)
+    //     ESP_LOGI(TAG, "Registered POST /api/network/sta/disconnect");
+    // else
+    //     ESP_LOGE(TAG,
+    //         "Failed to register POST /api/network/sta/disconnect: %s",
+    //         esp_err_to_name(err));
 
     // GET /api/network/status
     httpd_uri_t get_network_status_uri = {.uri = "/api/network/status",

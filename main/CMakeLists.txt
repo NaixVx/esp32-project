@@ -8,5 +8,4 @@ idf_component_register(
         nvs_flash
         config_manager
         http_server
-        sensor_manager
 )

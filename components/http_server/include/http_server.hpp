@@ -3,23 +3,22 @@
 #include "config_manager.hpp"
 #include "esp_http_server.h"
 
-// Forward declarations of handler registration
-namespace Handlers {
-void registerRootEndpoints(httpd_handle_t server, void* ctx);
+namespace Handlers
+{
+// void registerRootEndpoints(httpd_handle_t server, void* ctx);
 void registerDeviceEndpoints(httpd_handle_t server, void* ctx);
-void registerNetworkEndpoints(httpd_handle_t server, void* ctx);
-}  // namespace Handlers
+// void registerNetworkEndpoints(httpd_handle_t server, void* ctx);
+} // namespace Handlers
 
-class HttpServer {
-   public:
-    explicit HttpServer(const DeviceInfo& info);
+class HttpServer
+{
+  public:
+    HttpServer();
 
     void start();
     void stop();
 
-   private:
-    httpd_handle_t server_handle = nullptr;
-    const DeviceInfo& device_info;
-
+  private:
+    httpd_handle_t server_handle{nullptr};
     void registerAllEndpoints();
 };

@@ -3,7 +3,6 @@
 #include "cJSON.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
-#include "sensor_manager.hpp"
 
 static const char* TAG = "root_handler";
 
@@ -17,24 +16,16 @@ static inline void set_json_headers(httpd_req_t* req)
 // GET /
 static esp_err_t rootHandler(httpd_req_t* req)
 {
-    float temperature_c = DS18B20SensorManager::getLastTemperature();
-    bool sensor_ok = DS18B20SensorManager::getSensorStatus();
-
+    // mock values
     cJSON* root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "temperature", temperature_c);
+    cJSON_AddNumberToObject(root, "temperature", 20);
     cJSON_AddStringToObject(root, "unit", "C");
-    cJSON_AddBoolToObject(root, "sensor_ok", sensor_ok);
+    cJSON_AddBoolToObject(root, "sensor_ok", true);
 
     char* resp = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
 
     set_json_headers(req);
-
-    if (!sensor_ok) {
-        esp_err_t r = httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, resp);
-        free(resp);
-        return r;
-    }
 
     esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
     free(resp);

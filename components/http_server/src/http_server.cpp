@@ -9,7 +9,7 @@
 
 static const char* TAG = "http_server";
 
-HttpServer::HttpServer(const DeviceInfo& info) : device_info(info) {}
+HttpServer::HttpServer() = default;
 
 void HttpServer::registerAllEndpoints()
 {
@@ -21,6 +21,7 @@ void HttpServer::registerAllEndpoints()
 void HttpServer::start()
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.max_uri_handlers = 16;
 
     esp_err_t err = httpd_start(&server_handle, &config);
     if (err == ESP_OK) {

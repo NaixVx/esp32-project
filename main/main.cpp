@@ -3,9 +3,8 @@
 #include "config_manager.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-// #include "http_server.hpp"
+#include "http_server.hpp"
 #include "nvs_flash.h"
-// #include "sensor_manager.hpp"
 #include "wifi_manager.hpp"
 #include "esp_log.h"
 
@@ -29,14 +28,13 @@ extern "C" void app_main()
     ConfigManager& configManager = ConfigManager::getInstance();
 
     // --- INIT WIFI MANAGER ---
-    WiFiManager wifi;
-
+    static WiFiManager wifi;
     wifi.init();
     wifi.applyConfig();
 
     // --- INIT HTTP SERVER ---
-    // static HttpServer http_server(configManager.getDeviceInfo());
-    // http_server.start();
+    static HttpServer http_server;
+    http_server.start();
 
     // --- OTHER COMPONENTS ---
     // DS18B20SensorManager::init(GPIO_NUM_4);
