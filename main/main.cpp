@@ -30,7 +30,6 @@ extern "C" void app_main()
     // --- INIT WIFI MANAGER ---
     static WiFiManager wifi;
     wifi.init();
-    wifi.applyConfig();
 
     // --- INIT HTTP SERVER ---
     static HttpServer http_server;

@@ -11,16 +11,15 @@
 #include "utils/lock_guard.hpp"
 
 // ---- Limits ----
-#define DEVICE_NAME_MAX_LEN 32
+#define DEVICE_NAME_MAX_LEN 16
 #define DEVICE_TYPE_MAX_LEN 16
 #define FW_VERSION_MAX_LEN 16
-#define SSID_MAX_LEN 32
-#define PASSWORD_MAX_LEN 64
+#define SSID_MAX_LEN 16
+#define PASSWORD_MAX_LEN 32
 #define MAC_ADDR_LEN 18 // "AA:BB:CC:DD:EE:FF" + '\0'
 #define IP_ADDR_LEN 16  // "255.255.255.255" + '\0'
 #define ID_MAX_LEN 16
 
-// ---- Persisted layout helpers ----
 struct ConfigHeader {
     uint16_t version = 1;     // bump when the on-flash schema changes
     uint16_t struct_size = 0; // sizeof(PersistedConfig) at time of save
@@ -49,7 +48,6 @@ struct NetworkPublicConfig {
 
     uint8_t sta_connected;
     uint8_t ap_active;
-    uint8_t _pad[2];
 
     char sta_ssid[SSID_MAX_LEN];
     char sta_ip[IP_ADDR_LEN];
@@ -64,13 +62,11 @@ struct PersistedConfig {
     NetworkPrivateConfig network_private{};
 };
 
-// ---- Layout guarantees ----
 static_assert(sizeof(ConfigHeader) % 4 == 0, "ConfigHeader unexpected padding");
 static_assert(sizeof(DeviceInfo) % 4 == 0, "DeviceInfo not 4-byte aligned");
 static_assert(sizeof(NetworkPrivateConfig) % 4 == 0, "NetworkPrivateConfig not 4-byte aligned");
 static_assert(sizeof(PersistedConfig) % 4 == 0, "PersistedConfig not 4-byte aligned");
 
-// ---- Manager ----
 class ConfigManager
 {
   public:
@@ -92,10 +88,10 @@ class ConfigManager
     esp_err_t resetToDefaults();
     bool isValid();
 
-    using NetworkObserver = std::function<void(const NetworkPublicConfig&)>;
+    using NetworkPrivateObserver = std::function<void(const NetworkPrivateConfig&)>;
     using DeviceInfoObserver = std::function<void(const DeviceInfo&)>;
 
-    void registerNetworkObserver(NetworkObserver obs);
+    void registerNetworkPrivateObserver(NetworkPrivateObserver obs);
     void registerDeviceInfoObserver(DeviceInfoObserver obs);
 
   private:
@@ -107,6 +103,6 @@ class ConfigManager
 
     SemaphoreHandle_t mutex_{nullptr};
 
-    std::vector<NetworkObserver> network_observers_;
+    std::vector<NetworkPrivateObserver> network_private_observers_;
     std::vector<DeviceInfoObserver> info_observers_;
 };

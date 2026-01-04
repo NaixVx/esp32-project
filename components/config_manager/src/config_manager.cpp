@@ -130,6 +130,8 @@ esp_err_t ConfigManager::updateDeviceInfo(const DeviceInfo& info)
 
 esp_err_t ConfigManager::updateNetworkPrivateConfig(const NetworkPrivateConfig& net)
 {
+    NetworkPrivateConfig snapshot;
+    std::vector<NetworkPrivateObserver> observers;
 
     {
         LockGuard guard(mutex_);
@@ -137,28 +139,26 @@ esp_err_t ConfigManager::updateNetworkPrivateConfig(const NetworkPrivateConfig& 
             return ESP_OK;
         }
         persisted_.network_private = net;
+        snapshot = persisted_.network_private;
+        observers = network_private_observers_;
     }
 
-    return saveToNVS();
+    esp_err_t err = saveToNVS();
+    if (err == ESP_OK) {
+        for (auto& obs : observers)
+            if (obs)
+                obs(snapshot);
+    }
+    return err;
 }
 
 void ConfigManager::updateNetworkPublicConfig(const NetworkPublicConfig& net)
 {
-
-    std::vector<NetworkObserver> observers;
-
-    {
-        LockGuard guard(mutex_);
-        if (std::memcmp(&network_public_, &net, sizeof(net)) == 0) {
-            return;
-        }
-        network_public_ = net;
-        observers = network_observers_;
+    LockGuard guard(mutex_);
+    if (std::memcmp(&network_public_, &net, sizeof(net)) == 0) {
+        return;
     }
-
-    for (auto& obs : observers)
-        if (obs)
-            obs(network_public_);
+    network_public_ = net;
 }
 
 // -----------------------------------------------------------------------------
@@ -262,6 +262,7 @@ void ConfigManager::setDefaults()
     std::strncpy(persisted_.info.firmware_version, "0.0.1", FW_VERSION_MAX_LEN - 1);
 
     persisted_.network_private.ap_enabled = 1;
+    std::strncpy(persisted_.network_private.ap_ssid, "esp32-demo", SSID_MAX_LEN - 1);
 
     sanitize_persisted(persisted_);
 }
@@ -303,10 +304,10 @@ bool ConfigManager::isValid()
 // Observer registration
 // -----------------------------------------------------------------------------
 
-void ConfigManager::registerNetworkObserver(NetworkObserver obs)
+void ConfigManager::registerNetworkPrivateObserver(NetworkPrivateObserver obs)
 {
     LockGuard guard(mutex_);
-    network_observers_.push_back(std::move(obs));
+    network_private_observers_.push_back(std::move(obs));
 }
 
 void ConfigManager::registerDeviceInfoObserver(DeviceInfoObserver obs)

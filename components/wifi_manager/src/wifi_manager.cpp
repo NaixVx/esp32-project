@@ -39,25 +39,43 @@ void WiFiManager::init()
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    ConfigManager::getInstance().registerNetworkPrivateObserver(
+        [this](const NetworkPrivateConfig&) { this->syncWithConfig(); });
+
+    syncWithConfig();
+
     ESP_LOGI(TAG, "Wi-Fi initialized (AP mode)");
 }
 
-void WiFiManager::applyConfig()
+void WiFiManager::syncWithConfig()
 {
-    ConfigManager& cfgMgr = ConfigManager::getInstance();
-    NetworkPrivateConfig cfg = cfgMgr.getNetworkPrivateConfig();
+    NetworkPrivateConfig cfg = ConfigManager::getInstance().getNetworkPrivateConfig();
 
     LockGuard guard(mutex_);
 
-    if (cfg.ap_enabled && !ap_running_) {
-        startAP(cfg);
-    } else if (!cfg.ap_enabled && ap_running_) {
-        stopAP();
+    if (!cfg.ap_enabled) {
+        if (ap_running_) {
+            stopAP();
+        }
+        return;
     }
+
+    // AP enabled
+    if (!ap_running_) {
+        startAP(cfg);
+        return;
+    }
+
+    // AP running → restart to apply new SSID/password
+    stopAP();
+    startAP(cfg);
 }
 
 void WiFiManager::startAP(const NetworkPrivateConfig& cfg)
 {
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
     wifi_config_t ap_cfg{};
     std::strncpy(reinterpret_cast<char*>(ap_cfg.ap.ssid), cfg.ap_ssid, sizeof(ap_cfg.ap.ssid) - 1);
 
@@ -97,7 +115,6 @@ void WiFiManager::updatePublicState(bool ap_active)
 
     pub.ap_active = ap_active;
 
-    // MAC
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
     snprintf(pub.mac_address,
@@ -110,7 +127,6 @@ void WiFiManager::updatePublicState(bool ap_active)
         mac[4],
         mac[5]);
 
-    // IP
     if (ap_netif_) {
         esp_netif_ip_info_t ip;
         if (esp_netif_get_ip_info(ap_netif_, &ip) == ESP_OK) {

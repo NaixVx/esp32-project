@@ -90,21 +90,39 @@ void Handlers::registerDeviceEndpoints(httpd_handle_t server, void* ctx)
 {
     esp_err_t err;
 
+    // GET /api/device/info
     httpd_uri_t get_device_info_uri = {.uri = "/api/device/info",
         .method = HTTP_GET,
         .handler = infoHandler,
         .user_ctx = ctx};
     err = httpd_register_uri_handler(server, &get_device_info_uri);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Registered GET /api/device/info");
+    } else {
+        ESP_LOGE(TAG, "Failed to register GET /api/device/info: %s", esp_err_to_name(err));
+    }
 
+    // PATCH /api/device/info
     httpd_uri_t patch_device_info_uri = {.uri = "/api/device/info",
         .method = HTTP_PATCH,
         .handler = patchDeviceInfoHandler,
         .user_ctx = ctx};
     err = httpd_register_uri_handler(server, &patch_device_info_uri);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Registered PATCH /api/device/info");
+    } else {
+        ESP_LOGE(TAG, "Failed to register PATCH /api/device/info: %s", esp_err_to_name(err));
+    }
 
+    // OPTIONS /api/device/info
     httpd_uri_t options_device_info_uri = {.uri = "/api/device/info",
         .method = HTTP_OPTIONS,
         .handler = optionsDeviceInfo,
         .user_ctx = ctx};
-    httpd_register_uri_handler(server, &options_device_info_uri);
+    err = httpd_register_uri_handler(server, &options_device_info_uri);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Registered OPTIONS /api/device/info");
+    } else {
+        ESP_LOGE(TAG, "Failed to register OPTIONS /api/device/info: %s", esp_err_to_name(err));
+    }
 }

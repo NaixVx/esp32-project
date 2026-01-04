@@ -14,7 +14,7 @@ class WiFiManager
     ~WiFiManager();
 
     void init();
-    void applyConfig();
+    void syncWithConfig();
 
   private:
     esp_netif_t* ap_netif_{nullptr};
