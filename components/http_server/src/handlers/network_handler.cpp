@@ -17,6 +17,38 @@ static inline void set_json_headers(httpd_req_t* req)
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 }
 
+// Optional: CORS preflight for all endpoints under /api/*
+static esp_err_t optionsAny(httpd_req_t* req)
+{
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
+    return httpd_resp_send(req, nullptr, 0);
+}
+
+// GET /api/network/status
+static esp_err_t networkStatusHandler(httpd_req_t* req)
+{
+    NetworkPublicConfig n = ConfigManager::getInstance().getNetworkPublicConfig();
+
+    cJSON* root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "mac_address", n.mac_address);
+    cJSON_AddBoolToObject(root, "ap_active", n.ap_active != 0);
+    cJSON_AddStringToObject(root, "ap_ssid", n.ap_ssid);
+    cJSON_AddStringToObject(root, "ap_ip", n.ap_ip);
+    cJSON_AddBoolToObject(root, "sta_connected", n.sta_connected != 0);
+    cJSON_AddStringToObject(root, "sta_ssid", n.sta_ssid);
+    cJSON_AddStringToObject(root, "sta_ip", n.sta_ip);
+
+    char* resp = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
+    set_json_headers(req);
+    esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
+    free(resp);
+    return ret;
+}
+
 // POST /api/network/ap/set
 static esp_err_t postApConfigHandler(httpd_req_t* req)
 {
@@ -149,38 +181,6 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
 //     return ret;
 // }
 
-// GET /api/network/status
-static esp_err_t networkStatusHandler(httpd_req_t* req)
-{
-    NetworkPublicConfig n = ConfigManager::getInstance().getNetworkPublicConfig();
-
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "mac_address", n.mac_address);
-    cJSON_AddBoolToObject(root, "ap_active", n.ap_active != 0);
-    cJSON_AddStringToObject(root, "ap_ssid", n.ap_ssid);
-    cJSON_AddStringToObject(root, "ap_ip", n.ap_ip);
-    cJSON_AddBoolToObject(root, "sta_connected", n.sta_connected != 0);
-    cJSON_AddStringToObject(root, "sta_ssid", n.sta_ssid);
-    cJSON_AddStringToObject(root, "sta_ip", n.sta_ip);
-
-    char* resp = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    set_json_headers(req);
-    esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
-    free(resp);
-    return ret;
-}
-
-// Optional: CORS preflight for all endpoints under /api/*
-static esp_err_t optionsAny(httpd_req_t* req)
-{
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
-    return httpd_resp_send(req, nullptr, 0);
-}
-
 // Registration
 void Handlers::registerNetworkEndpoints(httpd_handle_t server, void* ctx)
 {
@@ -191,8 +191,18 @@ void Handlers::registerNetworkEndpoints(httpd_handle_t server, void* ctx)
         .method = HTTP_OPTIONS,
         .handler = optionsAny,
         .user_ctx = ctx};
-    httpd_register_uri_handler(server,
-        &options_api); // ignore result; wildcard may not match on old IDF
+    httpd_register_uri_handler(server, &options_api);
+
+    // GET /api/network/status
+    httpd_uri_t get_network_status_uri = {.uri = "/api/network/status",
+        .method = HTTP_GET,
+        .handler = networkStatusHandler,
+        .user_ctx = ctx};
+    err = httpd_register_uri_handler(server, &get_network_status_uri);
+    if (err == ESP_OK)
+        ESP_LOGI(TAG, "Registered GET /api/network/status");
+    else
+        ESP_LOGE(TAG, "Failed to register GET /api/network/status: %s", esp_err_to_name(err));
 
     // POST /api/network/ap/set
     httpd_uri_t post_ap_config_uri = {.uri = "/api/network/ap/set",
@@ -228,15 +238,4 @@ void Handlers::registerNetworkEndpoints(httpd_handle_t server, void* ctx)
     //     ESP_LOGE(TAG,
     //         "Failed to register POST /api/network/sta/disconnect: %s",
     //         esp_err_to_name(err));
-
-    // GET /api/network/status
-    httpd_uri_t get_network_status_uri = {.uri = "/api/network/status",
-        .method = HTTP_GET,
-        .handler = networkStatusHandler,
-        .user_ctx = ctx};
-    err = httpd_register_uri_handler(server, &get_network_status_uri);
-    if (err == ESP_OK)
-        ESP_LOGI(TAG, "Registered GET /api/network/status");
-    else
-        ESP_LOGE(TAG, "Failed to register GET /api/network/status: %s", esp_err_to_name(err));
 }

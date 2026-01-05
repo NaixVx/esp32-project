@@ -263,6 +263,10 @@ void ConfigManager::setDefaults()
 
     persisted_.network_private.ap_enabled = 1;
     std::strncpy(persisted_.network_private.ap_ssid, "esp32-demo", SSID_MAX_LEN - 1);
+    persisted_.network_private.ap_password[0] = '\0';
+
+    persisted_.network_private.sta_ssid[0] = '\0';
+    persisted_.network_private.sta_password[0] = '\0';
 
     sanitize_persisted(persisted_);
 }

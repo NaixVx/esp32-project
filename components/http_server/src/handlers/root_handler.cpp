@@ -13,6 +13,14 @@ static inline void set_json_headers(httpd_req_t* req)
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 }
 
+static esp_err_t optionsRoot(httpd_req_t* req)
+{
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
+    return httpd_resp_send(req, nullptr, 0);
+}
+
 // GET /
 static esp_err_t rootHandler(httpd_req_t* req)
 {
@@ -32,18 +40,18 @@ static esp_err_t rootHandler(httpd_req_t* req)
     return ret;
 }
 
-// Optional: CORS preflight (browser-friendly)
-static esp_err_t optionsRoot(httpd_req_t* req)
-{
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,OPTIONS");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
-    return httpd_resp_send(req, nullptr, 0);
-}
-
 // Registration
 void Handlers::registerRootEndpoints(httpd_handle_t server, void* ctx)
 {
+    // OPTIONS / (CORS preflight)
+    httpd_uri_t options_uri = {
+        .uri = "/",
+        .method = HTTP_OPTIONS,
+        .handler = optionsRoot,
+        .user_ctx = ctx,
+    };
+    httpd_register_uri_handler(server, &options_uri); // ignore error if unsupported
+
     // GET /
     httpd_uri_t root_uri = {
         .uri = "/",
@@ -57,15 +65,6 @@ void Handlers::registerRootEndpoints(httpd_handle_t server, void* ctx)
     } else {
         ESP_LOGI(TAG, "Registered GET /");
     }
-
-    // OPTIONS / (CORS preflight)
-    httpd_uri_t options_uri = {
-        .uri = "/",
-        .method = HTTP_OPTIONS,
-        .handler = optionsRoot,
-        .user_ctx = ctx,
-    };
-    httpd_register_uri_handler(server, &options_uri); // ignore error if unsupported
 
     // Favicon (empty)
     httpd_uri_t favicon_uri = {.uri = "/favicon.ico",

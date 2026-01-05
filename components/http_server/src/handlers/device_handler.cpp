@@ -17,13 +17,24 @@ static inline void set_json_headers(httpd_req_t* req)
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 }
 
+static esp_err_t optionsDeviceInfo(httpd_req_t* req)
+{
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,PATCH,OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
+
+    return httpd_resp_send(req, nullptr, 0);
+}
+
 // GET /api/device/info
 static esp_err_t infoHandler(httpd_req_t* req)
 {
     DeviceInfo device_info = ConfigManager::getInstance().getDeviceInfo();
 
     cJSON* root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "id", device_info.id);
     cJSON_AddStringToObject(root, "device_name", device_info.device_name);
+    cJSON_AddStringToObject(root, "device_type", device_info.device_type);
     cJSON_AddStringToObject(root, "firmware_version", device_info.firmware_version);
 
     char* resp = cJSON_PrintUnformatted(root);
@@ -49,7 +60,8 @@ static esp_err_t patchDeviceInfoHandler(httpd_req_t* req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
 
     const cJSON* name = cJSON_GetObjectItem(json, "device_name");
-    if (!cJSON_IsString(name) || strlen(name->valuestring) >= DEVICE_NAME_MAX_LEN) {
+    if (!cJSON_IsString(name) || strlen(name->valuestring) == 0 ||
+        strlen(name->valuestring) >= DEVICE_NAME_MAX_LEN) {
         cJSON_Delete(json);
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid device_name");
     }
@@ -75,15 +87,6 @@ static esp_err_t patchDeviceInfoHandler(httpd_req_t* req)
     free(resp_str);
     cJSON_Delete(json);
     return ret;
-}
-
-static esp_err_t optionsDeviceInfo(httpd_req_t* req)
-{
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,PATCH,OPTIONS");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
-
-    return httpd_resp_send(req, nullptr, 0);
 }
 
 void Handlers::registerDeviceEndpoints(httpd_handle_t server, void* ctx)
