@@ -29,5 +29,5 @@ class WiFiManager
     void startAP(const NetworkPrivateConfig& cfg);
     void stopAP();
 
-    void updatePublicState(bool ap_active);
+    void updatePublicState(bool ap_active, const char* ap_ssid);
 };

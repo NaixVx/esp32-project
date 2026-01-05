@@ -39,6 +39,8 @@ void WiFiManager::init()
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    // TODO: add some delay to be able to send http response before reconfiguration
+    // like changing ap ssid or password, ap stops first
     ConfigManager::getInstance().registerNetworkPrivateObserver(
         [this](const NetworkPrivateConfig&) { this->syncWithConfig(); });
 
@@ -92,7 +94,7 @@ void WiFiManager::startAP(const NetworkPrivateConfig& cfg)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
 
     ap_running_ = true;
-    updatePublicState(true);
+    updatePublicState(true, cfg.ap_ssid);
 
     ESP_LOGI(TAG, "AP started (SSID=%s)", cfg.ap_ssid);
 }
@@ -103,17 +105,25 @@ void WiFiManager::stopAP()
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_NULL));
 
     ap_running_ = false;
-    updatePublicState(false);
+    updatePublicState(false, nullptr);
 
     ESP_LOGI(TAG, "AP stopped");
 }
 
-void WiFiManager::updatePublicState(bool ap_active)
+void WiFiManager::updatePublicState(bool ap_active, const char* ap_ssid)
 {
     ConfigManager& cfgMgr = ConfigManager::getInstance();
     NetworkPublicConfig pub = cfgMgr.getNetworkPublicConfig();
 
     pub.ap_active = ap_active;
+
+    if (ap_active && ap_ssid) {
+        std::strncpy(pub.ap_ssid, ap_ssid, SSID_MAX_LEN - 1);
+        pub.ap_ssid[SSID_MAX_LEN - 1] = '\0';
+    } else {
+        pub.ap_ssid[0] = '\0';
+        pub.ap_ip[0] = '\0';
+    }
 
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
@@ -127,7 +137,7 @@ void WiFiManager::updatePublicState(bool ap_active)
         mac[4],
         mac[5]);
 
-    if (ap_netif_) {
+    if (ap_active && ap_netif_) {
         esp_netif_ip_info_t ip;
         if (esp_netif_get_ip_info(ap_netif_, &ip) == ESP_OK) {
             snprintf(pub.ap_ip, sizeof(pub.ap_ip), IPSTR, IP2STR(&ip.ip));

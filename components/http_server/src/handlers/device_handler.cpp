@@ -20,7 +20,7 @@ static inline void set_json_headers(httpd_req_t* req)
 static esp_err_t optionsDeviceInfo(httpd_req_t* req)
 {
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,PATCH,OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,POST,OPTIONS");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
 
     return httpd_resp_send(req, nullptr, 0);
@@ -46,8 +46,8 @@ static esp_err_t infoHandler(httpd_req_t* req)
     return ret;
 }
 
-// PATCH /api/device/info
-static esp_err_t patchDeviceInfoHandler(httpd_req_t* req)
+// POST /api/device/info
+static esp_err_t postDeviceInfoHandler(httpd_req_t* req)
 {
     char buf[256];
     int len = 0;
@@ -105,16 +105,16 @@ void Handlers::registerDeviceEndpoints(httpd_handle_t server, void* ctx)
         ESP_LOGE(TAG, "Failed to register GET /api/device/info: %s", esp_err_to_name(err));
     }
 
-    // PATCH /api/device/info
-    httpd_uri_t patch_device_info_uri = {.uri = "/api/device/info",
-        .method = HTTP_PATCH,
-        .handler = patchDeviceInfoHandler,
+    // POST /api/device/info
+    httpd_uri_t post_device_info_uri = {.uri = "/api/device/info",
+        .method = HTTP_POST,
+        .handler = postDeviceInfoHandler,
         .user_ctx = ctx};
-    err = httpd_register_uri_handler(server, &patch_device_info_uri);
+    err = httpd_register_uri_handler(server, &post_device_info_uri);
     if (err == ESP_OK) {
-        ESP_LOGI(TAG, "Registered PATCH /api/device/info");
+        ESP_LOGI(TAG, "Registered POST /api/device/info");
     } else {
-        ESP_LOGE(TAG, "Failed to register PATCH /api/device/info: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Failed to register POST /api/device/info: %s", esp_err_to_name(err));
     }
 
     // OPTIONS /api/device/info

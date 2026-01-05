@@ -52,49 +52,69 @@ static esp_err_t networkStatusHandler(httpd_req_t* req)
 // POST /api/network/ap/set
 static esp_err_t postApConfigHandler(httpd_req_t* req)
 {
-    char buf[384];
+    char buf[256];
     int len = 0;
+
     if (!http_read_body(req, buf, sizeof(buf), &len) || len <= 0) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data");
     }
 
     cJSON* json = cJSON_Parse(buf);
-    if (!json)
+    if (!json) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+    }
 
     NetworkPrivateConfig network_config = ConfigManager::getInstance().getNetworkPrivateConfig();
 
+    // --- ap_ssid ---
     const cJSON* ssid = cJSON_GetObjectItem(json, "ap_ssid");
     if (ssid) {
-        if (!cJSON_IsString(ssid) || strlen(ssid->valuestring) >= SSID_MAX_LEN) {
+        if (!cJSON_IsString(ssid)) {
             cJSON_Delete(json);
             return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid ap_ssid");
         }
+
+        size_t ssid_len = strlen(ssid->valuestring);
+        if (ssid_len == 0 || ssid_len >= SSID_MAX_LEN) {
+            cJSON_Delete(json);
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid ap_ssid length");
+        }
+
         strncpy(network_config.ap_ssid, ssid->valuestring, SSID_MAX_LEN - 1);
         network_config.ap_ssid[SSID_MAX_LEN - 1] = '\0';
     }
 
+    // --- ap_password ---
     if (cJSON_HasObjectItem(json, "ap_password")) {
         const cJSON* password = cJSON_GetObjectItem(json, "ap_password");
-        if (cJSON_IsString(password)) {
+
+        if (cJSON_IsNull(password)) {
+            network_config.ap_password[0] = '\0';
+        } else if (cJSON_IsString(password)) {
             size_t pwlen = strlen(password->valuestring);
+
+            // WPA2 minimum length enforcement
+            if (pwlen > 0 && pwlen < 8) {
+                cJSON_Delete(json);
+                return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "ap_password too short");
+            }
+
             if (pwlen == 0) {
                 network_config.ap_password[0] = '\0';
             } else {
                 strncpy(network_config.ap_password, password->valuestring, PASSWORD_MAX_LEN - 1);
                 network_config.ap_password[PASSWORD_MAX_LEN - 1] = '\0';
             }
-        } else if (cJSON_IsNull(password)) {
-            network_config.ap_password[0] = '\0';
         } else {
             cJSON_Delete(json);
             return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid ap_password");
         }
     }
 
+    // --- ap_enabled ---
     const cJSON* enabled = cJSON_GetObjectItem(json, "ap_enabled");
     if (enabled && cJSON_IsBool(enabled)) {
-        network_config.ap_enabled = cJSON_IsTrue(enabled) ? 1 : 0; // uint8_t
+        network_config.ap_enabled = cJSON_IsTrue(enabled) ? 1 : 0;
     }
 
     esp_err_t err = ConfigManager::getInstance().updateNetworkPrivateConfig(network_config);
@@ -112,6 +132,7 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
 
     set_json_headers(req);
     esp_err_t ret = httpd_resp_send(req, resp_str, strlen(resp_str));
+
     free(resp_str);
     cJSON_Delete(json);
     return ret;
