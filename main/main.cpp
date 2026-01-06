@@ -27,15 +27,18 @@ extern "C" void app_main()
     esp_vfs_littlefs_conf_t conf = {
         .base_path = "/www",
         .partition_label = "storage",
+        .partition = nullptr,
         .format_if_mount_failed = true,
+        .read_only = false,
         .dont_mount = false,
+        .grow_on_mount = false,
     };
 
     esp_err_t err = esp_vfs_littlefs_register(&conf);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "LittleFS mount failed: %s", esp_err_to_name(err));
     } else {
-        ESP_LOGI(TAG, "LittleFS mounted at /fs");
+        ESP_LOGI(TAG, "LittleFS mounted at /www");
     }
 
     // --- INIT CONFIG MANAGER ---

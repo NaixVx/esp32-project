@@ -24,20 +24,23 @@ static esp_err_t optionsRoot(httpd_req_t* req)
 // GET /
 static esp_err_t rootHandler(httpd_req_t* req)
 {
-    // mock values
-    cJSON* root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "temperature", 20);
-    cJSON_AddStringToObject(root, "unit", "C");
-    cJSON_AddBoolToObject(root, "sensor_ok", true);
+    FILE* f = fopen("/www/index.html", "r");
+    if (!f) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "index.html not found");
+        return ESP_FAIL;
+    }
 
-    char* resp = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+    httpd_resp_set_type(req, "text/html");
 
-    set_json_headers(req);
+    char buf[512];
+    size_t read_bytes;
+    while ((read_bytes = fread(buf, 1, sizeof(buf), f)) > 0) {
+        httpd_resp_send_chunk(req, buf, read_bytes);
+    }
 
-    esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
-    free(resp);
-    return ret;
+    fclose(f);
+    httpd_resp_send_chunk(req, nullptr, 0); // end response
+    return ESP_OK;
 }
 
 // Registration
