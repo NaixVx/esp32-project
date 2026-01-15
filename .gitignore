@@ -3,6 +3,7 @@ build/
 sdkconfig
 sdkconfig.old
 sdkconfig.ci
+dependencies.lock
 api_requests/
 
 .DS_Store

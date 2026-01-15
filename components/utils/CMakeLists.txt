@@ -1,9 +1,8 @@
 idf_component_register(
     SRCS
-        "src/config_manager.cpp"
+        "src/utils/http_utils.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES
-        nvs_flash
-        utils
+        esp_http_server
 )

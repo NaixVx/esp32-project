@@ -1,216 +1,321 @@
 #include "config_manager.hpp"
 
+#include <algorithm>
 #include <cstring>
-#include <mutex>
+#include <vector>
 
 #include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "utils/lock_guard.hpp"
 
 static const char* TAG = "config_manager";
-constexpr const char* NVS_NAMESPACE = "storage";
-constexpr const char* NVS_KEY = "dev_config";
 
-/**
- * @brief Get singleton instance of ConfigManager
- *
- * @return Reference to the ConfigManager instance
- */
-ConfigManager& ConfigManager::getInstance() {
+constexpr const char* NVS_NAMESPACE = "cfg";
+constexpr const char* NVS_KEY = "cfg_v1";
+constexpr const char* NVS_KEY_TMP = "cfg_tmp";
+
+// -----------------------------------------------------------------------------
+// Internal helpers
+// -----------------------------------------------------------------------------
+
+static inline void clamp_cstr(char* buf, size_t max_len)
+{
+    buf[max_len - 1] = '\0';
+}
+
+static inline void sanitize_persisted(PersistedConfig& cfg)
+{
+    clamp_cstr(cfg.info.id, ID_MAX_LEN);
+    clamp_cstr(cfg.info.device_name, DEVICE_NAME_MAX_LEN);
+    clamp_cstr(cfg.info.device_type, DEVICE_TYPE_MAX_LEN);
+    clamp_cstr(cfg.info.firmware_version, FW_VERSION_MAX_LEN);
+
+    clamp_cstr(cfg.network_private.sta_ssid, SSID_MAX_LEN);
+    clamp_cstr(cfg.network_private.sta_password, PASSWORD_MAX_LEN);
+    clamp_cstr(cfg.network_private.ap_ssid, SSID_MAX_LEN);
+    clamp_cstr(cfg.network_private.ap_password, PASSWORD_MAX_LEN);
+
+    cfg.network_private.ap_enabled = !!cfg.network_private.ap_enabled;
+}
+
+// -----------------------------------------------------------------------------
+// Singleton
+// -----------------------------------------------------------------------------
+
+ConfigManager& ConfigManager::getInstance()
+{
     static ConfigManager instance;
     return instance;
 }
 
-/**
- * @brief Private constructor that loads config from NVS or sets defaults
- */
-ConfigManager::ConfigManager() {
+ConfigManager::ConfigManager()
+{
     ESP_LOGI(TAG, "Initializing ConfigManager");
+
+    mutex_ = xSemaphoreCreateMutex();
+    if (!mutex_) {
+        ESP_LOGE(TAG, "Failed to create mutex");
+        abort();
+    }
 
     if (loadFromNVS() != ESP_OK || !isValid()) {
         ESP_LOGW(TAG, "Invalid or missing config, using defaults");
         setDefaults();
-        saveToNVS();
+        esp_err_t err = saveToNVS();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to save defaults: %s", esp_err_to_name(err));
+        }
     } else {
         ESP_LOGI(TAG, "Loaded valid config from NVS");
     }
 }
 
-/**
- * @brief Get current device info
- *
- * @return DeviceInfo structure
- */
-DeviceInfo ConfigManager::getDeviceInfo() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGD(TAG, "Returning device info");
-    return config_.info;
-}
-
-/**
- * @brief Update device info and save to NVS
- *
- * @param info New device info
- */
-void ConfigManager::updateDeviceInfo(const DeviceInfo& info) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGI(TAG, "Updating device info: name=%s, fw=%s", info.device_name, info.firmware_version);
-    config_.info = info;
-    saveToNVS();
-}
-
-/**
- * @brief Get current network configuration
- *
- * @return NetworkConfig structure
- */
-NetworkConfig ConfigManager::getNetworkConfig() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGD(TAG, "Returning network config");
-    return config_.network;
-}
-
-/**
- * @brief Update network configuration and save to NVS
- *
- * @param netConfig New network configuration
- */
-void ConfigManager::updateNetworkConfig(const NetworkConfig& netConfig) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGI(TAG, "Updating network config: AP=%s", netConfig.ap_ssid);
-    config_.network = netConfig;
-    saveToNVS();
-}
-
-/**
- * @brief Get full device configuration
- *
- * @return DeviceConfig structure
- */
-DeviceConfig ConfigManager::getConfig() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGD(TAG, "Returning full config");
-    return config_;
-}
-
-/**
- * @brief Update full configuration and save to NVS
- *
- * @param newConfig New configuration
- */
-void ConfigManager::updateConfig(const DeviceConfig& newConfig) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGI(TAG, "Updating full config");
-    config_ = newConfig;
-    saveToNVS();
-}
-
-/**
- * @brief Save current config to NVS
- *
- * @return esp_err_t ESP_OK on success or error code
- */
-esp_err_t ConfigManager::saveToNVS() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGI(TAG, "Saving device config to NVS");
-
-    nvs_handle_t nvs;
-    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to open NVS: %s", esp_err_to_name(err));
-        return err;
+ConfigManager::~ConfigManager()
+{
+    if (mutex_) {
+        vSemaphoreDelete(mutex_);
     }
+}
 
-    err = nvs_set_blob(nvs, NVS_KEY, &config_, sizeof(config_));
-    if (err == ESP_OK) {
-        err = nvs_commit(nvs);
-        if (err == ESP_OK) {
-            ESP_LOGI(TAG, "Config saved successfully");
-        } else {
-            ESP_LOGE(TAG, "Failed to commit config: %s", esp_err_to_name(err));
+// -----------------------------------------------------------------------------
+// Getters
+// -----------------------------------------------------------------------------
+
+DeviceInfo ConfigManager::getDeviceInfo()
+{
+    LockGuard guard(mutex_);
+    return persisted_.info;
+}
+
+NetworkPrivateConfig ConfigManager::getNetworkPrivateConfig()
+{
+    LockGuard guard(mutex_);
+    return persisted_.network_private;
+}
+
+NetworkPublicConfig ConfigManager::getNetworkPublicConfig()
+{
+    LockGuard guard(mutex_);
+    return network_public_;
+}
+
+// -----------------------------------------------------------------------------
+// Updates
+// -----------------------------------------------------------------------------
+
+esp_err_t ConfigManager::updateDeviceInfo(const DeviceInfo& info)
+{
+    DeviceInfo snapshot;
+    std::vector<DeviceInfoObserver> observers;
+
+    {
+        LockGuard guard(mutex_);
+        if (std::memcmp(&persisted_.info, &info, sizeof(info)) == 0) {
+            return ESP_OK;
         }
-    } else {
-        ESP_LOGE(TAG, "Failed to set config blob: %s", esp_err_to_name(err));
+        persisted_.info = info;
+        snapshot = persisted_.info;
+        observers = info_observers_;
     }
 
-    nvs_close(nvs);
+    esp_err_t err = saveToNVS();
+    if (err == ESP_OK) {
+        for (auto& obs : observers)
+            if (obs)
+                obs(snapshot);
+    }
     return err;
 }
 
-/**
- * @brief Load config from NVS
- *
- * @return esp_err_t ESP_OK on success or error code
- */
-esp_err_t ConfigManager::loadFromNVS() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGI(TAG, "Loading device config from NVS");
+esp_err_t ConfigManager::updateNetworkPrivateConfig(const NetworkPrivateConfig& net)
+{
+    NetworkPrivateConfig snapshot;
+    std::vector<NetworkPrivateObserver> observers;
 
-    nvs_handle_t nvs;
-    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs);
+    {
+        LockGuard guard(mutex_);
+        if (std::memcmp(&persisted_.network_private, &net, sizeof(net)) == 0) {
+            return ESP_OK;
+        }
+        persisted_.network_private = net;
+        snapshot = persisted_.network_private;
+        observers = network_private_observers_;
+    }
+
+    esp_err_t err = saveToNVS();
+    if (err == ESP_OK) {
+        for (auto& obs : observers)
+            if (obs)
+                obs(snapshot);
+    }
+    return err;
+}
+
+void ConfigManager::updateNetworkPublicConfig(const NetworkPublicConfig& net)
+{
+    LockGuard guard(mutex_);
+    if (std::memcmp(&network_public_, &net, sizeof(net)) == 0) {
+        return;
+    }
+    network_public_ = net;
+}
+
+// -----------------------------------------------------------------------------
+// Persistence
+// -----------------------------------------------------------------------------
+
+esp_err_t ConfigManager::saveToNVS()
+{
+    LockGuard guard(mutex_);
+
+    persisted_.header.version = 1;
+    persisted_.header.struct_size = static_cast<uint16_t>(sizeof(PersistedConfig));
+
+    sanitize_persisted(persisted_);
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h);
+    if (err != ESP_OK)
+        return err;
+
+    err = nvs_set_blob(h, NVS_KEY_TMP, &persisted_, sizeof(PersistedConfig));
+    if (err == ESP_OK)
+        err = nvs_set_blob(h, NVS_KEY, &persisted_, sizeof(PersistedConfig));
+
+    if (err == ESP_OK) {
+        esp_err_t e2 = nvs_erase_key(h, NVS_KEY_TMP);
+        if (e2 != ESP_OK && e2 != ESP_ERR_NVS_NOT_FOUND) {
+            err = e2;
+        }
+    }
+
+    if (err == ESP_OK)
+        err = nvs_commit(h);
+
+    nvs_close(h);
+
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to open NVS: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Failed to save config: %s", esp_err_to_name(err));
+    }
+    return err;
+}
+
+esp_err_t ConfigManager::loadFromNVS()
+{
+    LockGuard guard(mutex_);
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &h);
+    if (err != ESP_OK)
+        return err;
+
+    size_t blob_size = 0;
+    err = nvs_get_blob(h, NVS_KEY, nullptr, &blob_size);
+    if (err != ESP_OK || blob_size < sizeof(ConfigHeader)) {
+        nvs_close(h);
         return err;
     }
 
-    size_t required_size = sizeof(config_);
-    err = nvs_get_blob(nvs, NVS_KEY, &config_, &required_size);
-    nvs_close(nvs);
+    std::vector<uint8_t> buf(blob_size);
+    err = nvs_get_blob(h, NVS_KEY, buf.data(), &blob_size);
+    nvs_close(h);
+    if (err != ESP_OK)
+        return err;
 
-    if (err == ESP_OK) {
-        ESP_LOGI(TAG, "Config loaded successfully");
-    } else {
-        ESP_LOGW(TAG, "No valid config found: %s", esp_err_to_name(err));
+    const auto* header = reinterpret_cast<const ConfigHeader*>(buf.data());
+
+    if (header->version != 1) {
+        ESP_LOGW(TAG, "Unknown config version: %u", static_cast<unsigned>(header->version));
+        return ESP_ERR_INVALID_VERSION;
     }
 
-    return err;
+    std::memset(&persisted_, 0, sizeof(PersistedConfig));
+    const size_t copy_len = std::min(static_cast<size_t>(header->struct_size),
+        static_cast<size_t>(sizeof(PersistedConfig)));
+
+    std::memcpy(&persisted_, buf.data(), copy_len);
+
+    sanitize_persisted(persisted_);
+
+    persisted_.header.version = 1;
+    persisted_.header.struct_size = static_cast<uint16_t>(sizeof(PersistedConfig));
+
+    return ESP_OK;
 }
 
-/**
- * @brief Set config to default values
- */
-void ConfigManager::setDefaults() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    ESP_LOGW(TAG, "Setting default config");
+// -----------------------------------------------------------------------------
+// Defaults & validation
+// -----------------------------------------------------------------------------
 
-    std::memset(&config_, 0, sizeof(config_));
+void ConfigManager::setDefaults()
+{
+    LockGuard guard(mutex_);
+    std::memset(&persisted_, 0, sizeof(persisted_));
 
-    // Device Info
-    strcpy(config_.info.device_name, "esp32-project");
-    strcpy(config_.info.firmware_version, "0.001");
+    persisted_.header.version = 1;
+    persisted_.header.struct_size = static_cast<uint16_t>(sizeof(PersistedConfig));
 
-    // Network defaults
-    strcpy(config_.network.ap_ssid, "ESP32_default_AP");
-    config_.network.ap_password[0] = '\0';
-    config_.network.ap_enabled = true;
-    config_.network.sta_enabled = false;
-    config_.network.ssid[0] = '\0';
-    config_.network.bssid[0] = '\0';
-    config_.network.ip_address[0] = '\0';
-    config_.network.mac_address[0] = '\0';
+    std::strncpy(persisted_.info.id, "0", ID_MAX_LEN - 1);
+    std::strncpy(persisted_.info.device_name, "esp32-demo", DEVICE_NAME_MAX_LEN - 1);
+    std::strncpy(persisted_.info.device_type, "generic", DEVICE_TYPE_MAX_LEN - 1);
+    std::strncpy(persisted_.info.firmware_version, "0.0.1", FW_VERSION_MAX_LEN - 1);
 
-    ESP_LOGI(TAG, "Default config set");
+    persisted_.network_private.ap_enabled = 1;
+    std::strncpy(persisted_.network_private.ap_ssid, "esp32-demo", SSID_MAX_LEN - 1);
+    persisted_.network_private.ap_password[0] = '\0';
+
+    persisted_.network_private.sta_ssid[0] = '\0';
+    persisted_.network_private.sta_password[0] = '\0';
+
+    sanitize_persisted(persisted_);
 }
 
-/**
- * @brief Check if current config is valid
- *
- * @return true if valid, false otherwise
- */
-bool ConfigManager::isValid() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    bool valid = true;
+esp_err_t ConfigManager::resetToDefaults()
+{
+    setDefaults();
+    return saveToNVS();
+}
 
-    if (strlen(config_.info.device_name) == 0 || strlen(config_.info.firmware_version) == 0 ||
-        strlen(config_.network.ap_ssid) == 0) {
-        valid = false;
-    }
+bool ConfigManager::isValid()
+{
+    LockGuard guard(mutex_);
 
-    if (!valid) {
-        ESP_LOGW(TAG, "Config validation failed");
-    } else {
-        ESP_LOGI(TAG, "Config validation passed");
-    }
+    auto within = [](const char* s, size_t n) {
+        return strnlen(s, n) < n;
+    };
 
-    return valid;
+    if (!within(persisted_.info.device_name, DEVICE_NAME_MAX_LEN))
+        return false;
+    if (!within(persisted_.info.device_type, DEVICE_TYPE_MAX_LEN))
+        return false;
+    if (!within(persisted_.info.firmware_version, FW_VERSION_MAX_LEN))
+        return false;
+
+    if (!within(persisted_.network_private.sta_ssid, SSID_MAX_LEN))
+        return false;
+    if (!within(persisted_.network_private.sta_password, PASSWORD_MAX_LEN))
+        return false;
+    if (!within(persisted_.network_private.ap_ssid, SSID_MAX_LEN))
+        return false;
+    if (!within(persisted_.network_private.ap_password, PASSWORD_MAX_LEN))
+        return false;
+
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+// Observer registration
+// -----------------------------------------------------------------------------
+
+void ConfigManager::registerNetworkPrivateObserver(NetworkPrivateObserver obs)
+{
+    LockGuard guard(mutex_);
+    network_private_observers_.push_back(std::move(obs));
+}
+
+void ConfigManager::registerDeviceInfoObserver(DeviceInfoObserver obs)
+{
+    LockGuard guard(mutex_);
+    info_observers_.push_back(std::move(obs));
 }
