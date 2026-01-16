@@ -1,14 +1,93 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <meta charset="utf-8">
-    <title>ESP32</title>
+    <meta charset="UTF-8" />
+    <title>ESP32 Status</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" href="/www/style.css" />
 </head>
 
 <body>
-    <h1>Hello from ESP32</h1>
-    <p>LittleFS + HTTP server works.</p>
+    <div class="card">
+        <h2>Project</h2>
+        <p><strong>ESP32 Configuration Portal</strong></p>
+    </div>
+
+    <div class="card">
+        <h2>Device Info</h2>
+
+        <div class="sub-card">
+            <form method="POST" action="/device/save">
+                <ul>
+                    <li><label>ID:</label> 0</li>
+
+                    <li>
+                        <label for="device_name">Name:</label>
+                        <input id="device_name" type="text" name="device_name" value="esp-demo-project"
+                            maxlength="32" />
+                    </li>
+
+                    <li><label>Type:</label> sensor</li>
+                    <li><label>Firmware:</label> v0.0.1</li>
+                </ul>
+
+                <button type="submit">Save Device Info</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Network Config</h2>
+
+        <p class="meta"><strong>MAC Address:</strong> AA:BB:CC:DD:EE:FF</p>
+
+        <form method="POST" action="/network/save">
+            <div class="sub-card">
+                <h3>Access Point (AP)</h3>
+                <ul>
+                    <li>
+                        <label for="ap_enabled">Enabled:</label>
+                        <input id="ap_enabled" type="checkbox" name="ap_enabled" checked />
+                    </li>
+
+                    <li>
+                        <label for="ap_ssid">SSID:</label>
+                        <input id="ap_ssid" type="text" name="ap_ssid" value="ESP32_AP" maxlength="32" />
+                    </li>
+
+                    <li>
+                        <label for="ap_password">Password:</label>
+                        <input id="ap_password" type="password" name="ap_password" value="ap_password" maxlength="64"
+                            autocomplete="off" />
+                    </li>
+
+                    <li><label>IP Address:</label> <span>192.168.4.1</span></li>
+                </ul>
+            </div>
+
+            <div class="sub-card">
+                <h3>Station (STA)</h3>
+                <ul>
+                    <li>
+                        <label for="sta_ssid">SSID:</label>
+                        <input id="sta_ssid" type="text" name="sta_ssid" value="Home_WiFi" maxlength="32" />
+                    </li>
+
+                    <li>
+                        <label for="sta_password">Password:</label>
+                        <input id="sta_password" type="password" name="sta_password" value="password123" maxlength="64"
+                            autocomplete="off" />
+                    </li>
+
+                    <li><label>IP Address:</label> <span>192.168.1.42</span></li>
+                </ul>
+            </div>
+
+            <button type="submit">Save Network Config</button>
+        </form>
+    </div>
 </body>
 
 </html>
