@@ -6,6 +6,7 @@ idf_component_register(
     REQUIRES
         esp_wifi
         esp_event
+        esp_timer
         config_manager
         utils
 )
