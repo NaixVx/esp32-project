@@ -31,12 +31,12 @@ static inline void sanitize_persisted(PersistedConfig& cfg)
     clamp_cstr(cfg.info.device_type, DEVICE_TYPE_MAX_LEN);
     clamp_cstr(cfg.info.firmware_version, FW_VERSION_MAX_LEN);
 
-    clamp_cstr(cfg.network_private.sta_ssid, SSID_MAX_LEN);
-    clamp_cstr(cfg.network_private.sta_password, PASSWORD_MAX_LEN);
-    clamp_cstr(cfg.network_private.ap_ssid, SSID_MAX_LEN);
-    clamp_cstr(cfg.network_private.ap_password, PASSWORD_MAX_LEN);
+    cfg.network.ap.enabled = !!cfg.network.ap.enabled;
+    clamp_cstr(cfg.network.ap.ssid, SSID_MAX_LEN);
+    clamp_cstr(cfg.network.ap.password, PASSWORD_MAX_LEN);
 
-    cfg.network_private.ap_enabled = !!cfg.network_private.ap_enabled;
+    clamp_cstr(cfg.network.sta.ssid, SSID_MAX_LEN);
+    clamp_cstr(cfg.network.sta.password, PASSWORD_MAX_LEN);
 }
 
 // -----------------------------------------------------------------------------
@@ -88,23 +88,17 @@ DeviceInfo ConfigManager::getDeviceInfo()
     return persisted_.info;
 }
 
-NetworkPrivateConfig ConfigManager::getNetworkPrivateConfig()
+NetworkConfig ConfigManager::getNetworkConfig()
 {
     LockGuard guard(mutex_);
-    return persisted_.network_private;
-}
-
-NetworkPublicConfig ConfigManager::getNetworkPublicConfig()
-{
-    LockGuard guard(mutex_);
-    return network_public_;
+    return persisted_.network;
 }
 
 // -----------------------------------------------------------------------------
-// Updates
+// Setters
 // -----------------------------------------------------------------------------
 
-esp_err_t ConfigManager::updateDeviceInfo(const DeviceInfo& info)
+esp_err_t ConfigManager::setDeviceInfo(const DeviceInfo& info)
 {
     DeviceInfo snapshot;
     std::vector<DeviceInfoObserver> observers;
@@ -128,19 +122,19 @@ esp_err_t ConfigManager::updateDeviceInfo(const DeviceInfo& info)
     return err;
 }
 
-esp_err_t ConfigManager::updateNetworkPrivateConfig(const NetworkPrivateConfig& net)
+esp_err_t ConfigManager::setNetworkConfig(const NetworkConfig& net)
 {
-    NetworkPrivateConfig snapshot;
-    std::vector<NetworkPrivateObserver> observers;
+    NetworkConfig snapshot;
+    std::vector<NetworkObserver> observers;
 
     {
         LockGuard guard(mutex_);
-        if (std::memcmp(&persisted_.network_private, &net, sizeof(net)) == 0) {
+        if (std::memcmp(&persisted_.network, &net, sizeof(net)) == 0) {
             return ESP_OK;
         }
-        persisted_.network_private = net;
-        snapshot = persisted_.network_private;
-        observers = network_private_observers_;
+        persisted_.network = net;
+        snapshot = persisted_.network;
+        observers = network_observers_;
     }
 
     esp_err_t err = saveToNVS();
@@ -152,13 +146,52 @@ esp_err_t ConfigManager::updateNetworkPrivateConfig(const NetworkPrivateConfig& 
     return err;
 }
 
-void ConfigManager::updateNetworkPublicConfig(const NetworkPublicConfig& net)
+esp_err_t ConfigManager::setNetworkConfigAP(const NetworkConfigAP& ap)
 {
-    LockGuard guard(mutex_);
-    if (std::memcmp(&network_public_, &net, sizeof(net)) == 0) {
-        return;
+    NetworkConfig snapshot;
+    std::vector<NetworkObserver> observers;
+
+    {
+        LockGuard guard(mutex_);
+        if (std::memcmp(&persisted_.network.ap, &ap, sizeof(ap)) == 0) {
+            return ESP_OK;
+        }
+        persisted_.network.ap = ap;
+        snapshot = persisted_.network;
+        observers = network_observers_;
     }
-    network_public_ = net;
+
+    esp_err_t err = saveToNVS();
+    if (err == ESP_OK) {
+        for (auto& obs : observers)
+            if (obs)
+                obs(snapshot);
+    }
+    return err;
+}
+
+esp_err_t ConfigManager::setNetworkConfigSTA(const NetworkConfigSTA& sta)
+{
+    NetworkConfig snapshot;
+    std::vector<NetworkObserver> observers;
+
+    {
+        LockGuard guard(mutex_);
+        if (std::memcmp(&persisted_.network.sta, &sta, sizeof(sta)) == 0) {
+            return ESP_OK;
+        }
+        persisted_.network.sta = sta;
+        snapshot = persisted_.network;
+        observers = network_observers_;
+    }
+
+    esp_err_t err = saveToNVS();
+    if (err == ESP_OK) {
+        for (auto& obs : observers)
+            if (obs)
+                obs(snapshot);
+    }
+    return err;
 }
 
 // -----------------------------------------------------------------------------
@@ -261,12 +294,12 @@ void ConfigManager::setDefaults()
     std::strncpy(persisted_.info.device_type, "generic", DEVICE_TYPE_MAX_LEN - 1);
     std::strncpy(persisted_.info.firmware_version, "0.0.1", FW_VERSION_MAX_LEN - 1);
 
-    persisted_.network_private.ap_enabled = 1;
-    std::strncpy(persisted_.network_private.ap_ssid, "esp32-demo", SSID_MAX_LEN - 1);
-    persisted_.network_private.ap_password[0] = '\0';
+    persisted_.network.ap.enabled = 1;
+    std::strncpy(persisted_.network.ap.ssid, "esp32-project", SSID_MAX_LEN - 1);
+    persisted_.network.ap.password[0] = '\0';
 
-    persisted_.network_private.sta_ssid[0] = '\0';
-    persisted_.network_private.sta_password[0] = '\0';
+    persisted_.network.sta.ssid[0] = '\0';
+    persisted_.network.sta.password[0] = '\0';
 
     sanitize_persisted(persisted_);
 }
@@ -285,6 +318,8 @@ bool ConfigManager::isValid()
         return strnlen(s, n) < n;
     };
 
+    if (!within(persisted_.info.id, ID_MAX_LEN))
+        return false;
     if (!within(persisted_.info.device_name, DEVICE_NAME_MAX_LEN))
         return false;
     if (!within(persisted_.info.device_type, DEVICE_TYPE_MAX_LEN))
@@ -292,13 +327,14 @@ bool ConfigManager::isValid()
     if (!within(persisted_.info.firmware_version, FW_VERSION_MAX_LEN))
         return false;
 
-    if (!within(persisted_.network_private.sta_ssid, SSID_MAX_LEN))
+    if (!within(persisted_.network.ap.ssid, SSID_MAX_LEN))
         return false;
-    if (!within(persisted_.network_private.sta_password, PASSWORD_MAX_LEN))
+    if (!within(persisted_.network.ap.password, PASSWORD_MAX_LEN))
         return false;
-    if (!within(persisted_.network_private.ap_ssid, SSID_MAX_LEN))
+
+    if (!within(persisted_.network.sta.ssid, SSID_MAX_LEN))
         return false;
-    if (!within(persisted_.network_private.ap_password, PASSWORD_MAX_LEN))
+    if (!within(persisted_.network.sta.password, PASSWORD_MAX_LEN))
         return false;
 
     return true;
@@ -308,10 +344,10 @@ bool ConfigManager::isValid()
 // Observer registration
 // -----------------------------------------------------------------------------
 
-void ConfigManager::registerNetworkPrivateObserver(NetworkPrivateObserver obs)
+void ConfigManager::registerNetworkObserver(NetworkObserver obs)
 {
     LockGuard guard(mutex_);
-    network_private_observers_.push_back(std::move(obs));
+    network_observers_.push_back(std::move(obs));
 }
 
 void ConfigManager::registerDeviceInfoObserver(DeviceInfoObserver obs)

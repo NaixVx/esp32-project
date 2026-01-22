@@ -9,7 +9,7 @@ ColumnLimit: 100
 PointerAlignment: Left
 DerivePointerAlignment: false
 ReflowComments: false
-SortIncludes: false               # Keep your include order as-is
+SortIncludes: false
 IncludeBlocks: Preserve
 
 # === Compact but Readable Layout ===

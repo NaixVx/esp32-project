@@ -11,10 +11,10 @@
 #include "utils/lock_guard.hpp"
 
 // ---- Limits ----
-#define DEVICE_NAME_MAX_LEN 16
-#define DEVICE_TYPE_MAX_LEN 16
+#define DEVICE_NAME_MAX_LEN 32
+#define DEVICE_TYPE_MAX_LEN 32
 #define FW_VERSION_MAX_LEN 16
-#define SSID_MAX_LEN 16
+#define SSID_MAX_LEN 32
 #define PASSWORD_MAX_LEN 32
 #define MAC_ADDR_LEN 18 // "AA:BB:CC:DD:EE:FF" + '\0'
 #define IP_ADDR_LEN 16  // "255.255.255.255" + '\0'
@@ -32,39 +32,34 @@ struct DeviceInfo {
     char firmware_version[FW_VERSION_MAX_LEN];
 };
 
-struct NetworkPrivateConfig {
-    char sta_ssid[SSID_MAX_LEN];
-    char sta_password[PASSWORD_MAX_LEN];
-
-    uint8_t ap_enabled;
+struct NetworkConfigAP {
+    uint8_t enabled;
     uint8_t _pad[3];
-
-    char ap_ssid[SSID_MAX_LEN];
-    char ap_password[PASSWORD_MAX_LEN];
+    char ssid[SSID_MAX_LEN];
+    char password[PASSWORD_MAX_LEN];
 };
 
-struct NetworkPublicConfig {
+struct NetworkConfigSTA {
+    char ssid[SSID_MAX_LEN];
+    char password[PASSWORD_MAX_LEN];
+};
+
+struct NetworkConfig {
     char mac_address[MAC_ADDR_LEN];
-
-    uint8_t sta_connected;
-    uint8_t ap_active;
-
-    char sta_ssid[SSID_MAX_LEN];
-    char sta_ip[IP_ADDR_LEN];
-
-    char ap_ssid[SSID_MAX_LEN];
-    char ap_ip[IP_ADDR_LEN];
+    uint8_t _pad[2];
+    NetworkConfigAP ap{};
+    NetworkConfigSTA sta{};
 };
 
 struct PersistedConfig {
     ConfigHeader header{};
     DeviceInfo info{};
-    NetworkPrivateConfig network_private{};
+    NetworkConfig network{};
 };
 
 static_assert(sizeof(ConfigHeader) % 4 == 0, "ConfigHeader unexpected padding");
 static_assert(sizeof(DeviceInfo) % 4 == 0, "DeviceInfo not 4-byte aligned");
-static_assert(sizeof(NetworkPrivateConfig) % 4 == 0, "NetworkPrivateConfig not 4-byte aligned");
+static_assert(sizeof(NetworkConfig) % 4 == 0, "NetworkConfig not 4-byte aligned");
 static_assert(sizeof(PersistedConfig) % 4 == 0, "PersistedConfig not 4-byte aligned");
 
 class ConfigManager
@@ -73,13 +68,12 @@ class ConfigManager
     static ConfigManager& getInstance();
 
     DeviceInfo getDeviceInfo();
-    NetworkPrivateConfig getNetworkPrivateConfig();
+    esp_err_t setDeviceInfo(const DeviceInfo& info);
 
-    esp_err_t updateDeviceInfo(const DeviceInfo& info);
-    esp_err_t updateNetworkPrivateConfig(const NetworkPrivateConfig& net);
-
-    NetworkPublicConfig getNetworkPublicConfig();
-    void updateNetworkPublicConfig(const NetworkPublicConfig& net);
+    NetworkConfig getNetworkConfig();
+    esp_err_t setNetworkConfig(const NetworkConfig& net);
+    esp_err_t setNetworkConfigAP(const NetworkConfigAP& net);
+    esp_err_t setNetworkConfigSTA(const NetworkConfigSTA& net);
 
     esp_err_t loadFromNVS();
     esp_err_t saveToNVS();
@@ -88,10 +82,10 @@ class ConfigManager
     esp_err_t resetToDefaults();
     bool isValid();
 
-    using NetworkPrivateObserver = std::function<void(const NetworkPrivateConfig&)>;
+    using NetworkObserver = std::function<void(const NetworkConfig&)>;
     using DeviceInfoObserver = std::function<void(const DeviceInfo&)>;
 
-    void registerNetworkPrivateObserver(NetworkPrivateObserver obs);
+    void registerNetworkObserver(NetworkObserver obs);
     void registerDeviceInfoObserver(DeviceInfoObserver obs);
 
   private:
@@ -99,10 +93,9 @@ class ConfigManager
     ~ConfigManager();
 
     PersistedConfig persisted_{};
-    NetworkPublicConfig network_public_{};
 
     SemaphoreHandle_t mutex_{nullptr};
 
-    std::vector<NetworkPrivateObserver> network_private_observers_;
+    std::vector<NetworkObserver> network_observers_;
     std::vector<DeviceInfoObserver> info_observers_;
 };

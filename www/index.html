@@ -17,102 +17,69 @@
         <h2>Project</h2>
         <p><strong>ESP32 Configuration Portal</strong></p>
     </div>
-
-
     <div class="card">
         <h2>Device Info</h2>
-
-
         <div class="sub-card">
             <form id="device-form">
                 <ul>
                     <li><label>Id:</label> <span id="device_id"></span></li>
-
-
                     <li>
                         <label for="device_name">Name:</label>
                         <input id="device_name" type="text" maxlength="16" />
                     </li>
-
-
                     <li><label>Type:</label> <span id="device_type"></span></li>
                     <li><label>Firmware:</label> <span id="firmware_version"></span></li>
                 </ul>
-
-
-                <button type="submit">Save Device Info</button>
+                <button type="submit">Save</button>
             </form>
         </div>
     </div>
-
-
     <div class="card">
         <h2>Network Config</h2>
-
-
         <p class="meta"><strong>MAC Address:</strong> <span id="mac_address"></span></p>
-
-
         <form id="network-form">
             <div class="sub-card">
-                <h3>Access Point (AP)</h3>
+                <h3>Access Point</h3>
                 <ul>
+                    <li><label>IP Address:</label> <span id="ap_ip"></span></li>
                     <li>
                         <label for="ap_enabled">Enabled:</label>
                         <input id="ap_enabled" type="checkbox" name="ap_enabled" checked />
                     </li>
-
-
                     <li>
                         <label for="ap_ssid">SSID:</label>
                         <input id="ap_ssid" type="text" name="ap_ssid" maxlength="32" />
                     </li>
-
-
                     <li>
                         <label for="ap_password">Password:</label>
                         <input id="ap_password" type="password" name="ap_password" maxlength="64" autocomplete="off" />
                     </li>
-
-
-                    <li><label>IP Address:</label> <span id="ap_ip"></span></li>
                 </ul>
+                <button type="submit">Save</button>
             </div>
-
-
             <div class="sub-card">
-                <h3>Station (STA)</h3>
+                <h3>WiFi (STA)</h3>
                 <ul>
+                    <li><label>IP Address:</label> <span id="sta_ip"></span></li>
                     <li>
                         <label for="sta_ssid">SSID:</label>
                         <input id="sta_ssid" type="text" name="sta_ssid" maxlength="32" />
                     </li>
-
-
                     <li>
                         <label for="sta_password">Password:</label>
                         <input id="sta_password" type="password" name="sta_password" maxlength="64"
                             autocomplete="off" />
                     </li>
-
-
-                    <li><label>IP Address:</label> <span id="sta_ip"></span></li>
                 </ul>
+                <button type="submit">Save</button>
             </div>
 
-
-            <button type="submit">Save Network Config</button>
         </form>
     </div>
-
-
     <a href="https://github.com/NaixVx/esp32-project" target="_blank" rel="noopener">
         GitHub
     </a>
-
-
     <script src="/app.js"></script>
 </body>
-
 
 </html>

@@ -70,7 +70,7 @@ static esp_err_t postDeviceInfoHandler(httpd_req_t* req)
     strncpy(device_info.device_name, name->valuestring, DEVICE_NAME_MAX_LEN - 1);
     device_info.device_name[DEVICE_NAME_MAX_LEN - 1] = '\0';
 
-    esp_err_t err = ConfigManager::getInstance().updateDeviceInfo(device_info);
+    esp_err_t err = ConfigManager::getInstance().setDeviceInfo(device_info);
     cJSON* resp = cJSON_CreateObject();
     if (err == ESP_OK) {
         cJSON_AddStringToObject(resp, "status", "device name updated");

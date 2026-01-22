@@ -29,16 +29,15 @@ static esp_err_t optionsAny(httpd_req_t* req)
 // GET /api/network/status
 static esp_err_t networkStatusHandler(httpd_req_t* req)
 {
-    NetworkPublicConfig n = ConfigManager::getInstance().getNetworkPublicConfig();
+    NetworkConfig net = ConfigManager::getInstance().getNetworkConfig();
 
     cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "mac_address", n.mac_address);
-    cJSON_AddBoolToObject(root, "ap_active", n.ap_active != 0);
-    cJSON_AddStringToObject(root, "ap_ssid", n.ap_ssid);
-    cJSON_AddStringToObject(root, "ap_ip", n.ap_ip);
-    cJSON_AddBoolToObject(root, "sta_connected", n.sta_connected != 0);
-    cJSON_AddStringToObject(root, "sta_ssid", n.sta_ssid);
-    cJSON_AddStringToObject(root, "sta_ip", n.sta_ip);
+    cJSON_AddStringToObject(root, "mac_address", net.mac_address);
+    cJSON_AddBoolToObject(root, "ap_enabled", net.ap.enabled != 0);
+    cJSON_AddStringToObject(root, "ap_ssid", net.ap.ssid);
+    cJSON_AddStringToObject(root, "ap_ip", "0.0.0.0"); // retrieve current ip
+    cJSON_AddStringToObject(root, "sta_ssid", net.sta.ssid);
+    cJSON_AddStringToObject(root, "sta_ip", "0.0.0.0");
 
     char* resp = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -64,7 +63,7 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
     }
 
-    NetworkPrivateConfig network_config = ConfigManager::getInstance().getNetworkPrivateConfig();
+    NetworkConfigAP ap = ConfigManager::getInstance().getNetworkConfig().ap;
 
     // --- ap_ssid ---
     const cJSON* ssid = cJSON_GetObjectItem(json, "ap_ssid");
@@ -80,8 +79,8 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
             return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid ap_ssid length");
         }
 
-        strncpy(network_config.ap_ssid, ssid->valuestring, SSID_MAX_LEN - 1);
-        network_config.ap_ssid[SSID_MAX_LEN - 1] = '\0';
+        strncpy(ap.ssid, ssid->valuestring, SSID_MAX_LEN - 1);
+        ap.ssid[SSID_MAX_LEN - 1] = '\0';
     }
 
     // --- ap_password ---
@@ -89,7 +88,7 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
         const cJSON* password = cJSON_GetObjectItem(json, "ap_password");
 
         if (cJSON_IsNull(password)) {
-            network_config.ap_password[0] = '\0';
+            ap.password[0] = '\0';
         } else if (cJSON_IsString(password)) {
             size_t pwlen = strlen(password->valuestring);
 
@@ -100,10 +99,10 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
             }
 
             if (pwlen == 0) {
-                network_config.ap_password[0] = '\0';
+                ap.password[0] = '\0';
             } else {
-                strncpy(network_config.ap_password, password->valuestring, PASSWORD_MAX_LEN - 1);
-                network_config.ap_password[PASSWORD_MAX_LEN - 1] = '\0';
+                strncpy(ap.password, password->valuestring, PASSWORD_MAX_LEN - 1);
+                ap.password[PASSWORD_MAX_LEN - 1] = '\0';
             }
         } else {
             cJSON_Delete(json);
@@ -114,10 +113,10 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
     // --- ap_enabled ---
     const cJSON* enabled = cJSON_GetObjectItem(json, "ap_enabled");
     if (enabled && cJSON_IsBool(enabled)) {
-        network_config.ap_enabled = cJSON_IsTrue(enabled) ? 1 : 0;
+        ap.enabled = cJSON_IsTrue(enabled) ? 1 : 0;
     }
 
-    esp_err_t err = ConfigManager::getInstance().updateNetworkPrivateConfig(network_config);
+    esp_err_t err = ConfigManager::getInstance().setNetworkConfigAP(ap);
 
     cJSON* resp = cJSON_CreateObject();
     if (err == ESP_OK) {
@@ -138,7 +137,7 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
     return ret;
 }
 
-// // POST /api/network/sta/connect (enable STA + set SSID optionally)
+// // POST /api/network/sta/set (enable STA + set SSID optionally)
 // static esp_err_t staConnectHandler(httpd_req_t* req)
 // {
 //     // body is optional: { "ssid": "MyWiFi" }
