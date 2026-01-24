@@ -29,6 +29,8 @@ static esp_err_t optionsAny(httpd_req_t* req)
 // GET /api/network/status
 static esp_err_t networkStatusHandler(httpd_req_t* req)
 {
+    ESP_LOGI(TAG, "GET /api/network/status");
+
     NetworkConfig net = ConfigManager::getInstance().getNetworkConfig();
 
     cJSON* root = cJSON_CreateObject();
@@ -51,6 +53,8 @@ static esp_err_t networkStatusHandler(httpd_req_t* req)
 // POST /api/network/ap/set
 static esp_err_t postApConfigHandler(httpd_req_t* req)
 {
+    ESP_LOGI(TAG, "POST /api/network/ap/set");
+
     char buf[256];
     int len = 0;
 
@@ -81,6 +85,7 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
 
         strncpy(ap.ssid, ssid->valuestring, SSID_MAX_LEN - 1);
         ap.ssid[SSID_MAX_LEN - 1] = '\0';
+        // ESP_LOGI(TAG, "Updated ap_ssid");
     }
 
     // --- ap_password ---
@@ -104,6 +109,7 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
                 strncpy(ap.password, password->valuestring, PASSWORD_MAX_LEN - 1);
                 ap.password[PASSWORD_MAX_LEN - 1] = '\0';
             }
+            // ESP_LOGI(TAG, "Updated ap_password");
         } else {
             cJSON_Delete(json);
             return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid ap_password");
@@ -114,6 +120,7 @@ static esp_err_t postApConfigHandler(httpd_req_t* req)
     const cJSON* enabled = cJSON_GetObjectItem(json, "ap_enabled");
     if (enabled && cJSON_IsBool(enabled)) {
         ap.enabled = cJSON_IsTrue(enabled) ? 1 : 0;
+        // ESP_LOGI(TAG, "Updated ap_enabled");
     }
 
     esp_err_t err = ConfigManager::getInstance().setNetworkConfigAP(ap);

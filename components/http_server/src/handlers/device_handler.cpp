@@ -29,6 +29,8 @@ static esp_err_t optionsDeviceInfo(httpd_req_t* req)
 // GET /api/device/info
 static esp_err_t infoHandler(httpd_req_t* req)
 {
+    ESP_LOGI(TAG, "GET /api/device/info");
+
     DeviceInfo device_info = ConfigManager::getInstance().getDeviceInfo();
 
     cJSON* root = cJSON_CreateObject();
@@ -49,6 +51,8 @@ static esp_err_t infoHandler(httpd_req_t* req)
 // POST /api/device/info
 static esp_err_t postDeviceInfoHandler(httpd_req_t* req)
 {
+    ESP_LOGI(TAG, "POST /api/device/info");
+
     char buf[256];
     int len = 0;
     if (!http_read_body(req, buf, sizeof(buf), &len) || len <= 0) {

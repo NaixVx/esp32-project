@@ -24,6 +24,8 @@ static esp_err_t optionsRoot(httpd_req_t* req)
 // GET /
 static esp_err_t rootHandler(httpd_req_t* req)
 {
+    ESP_LOGI(TAG, "GET /");
+
     FILE* f = fopen("/www/index.html", "r");
     if (!f) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "index.html not found");
@@ -39,7 +41,7 @@ static esp_err_t rootHandler(httpd_req_t* req)
     }
 
     fclose(f);
-    httpd_resp_send_chunk(req, nullptr, 0); // end response
+    httpd_resp_send_chunk(req, nullptr, 0);
     return ESP_OK;
 }
 
@@ -84,7 +86,6 @@ static esp_err_t jsHandler(httpd_req_t* req)
     httpd_resp_send_chunk(req, nullptr, 0);
     return ESP_OK;
 }
-
 
 // Registration
 void Handlers::registerRootEndpoints(httpd_handle_t server, void* ctx)
