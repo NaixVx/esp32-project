@@ -1,6 +1,7 @@
 #include "handlers/network_handler.hpp"
 
 #include "utils/http_utils.hpp"
+#include "wifi_manager.hpp"
 
 #include "cJSON.h"
 #include "config_manager.hpp"
@@ -32,14 +33,22 @@ static esp_err_t networkStatusHandler(httpd_req_t* req)
     ESP_LOGI(TAG, "GET /api/network/status");
 
     NetworkConfig net = ConfigManager::getInstance().getNetworkConfig();
+    WiFiManager& wifi = WiFiManager::getInstance();
 
     cJSON* root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "mac_address", net.mac_address);
-    cJSON_AddBoolToObject(root, "ap_enabled", net.ap.enabled != 0);
-    cJSON_AddStringToObject(root, "ap_ssid", net.ap.ssid);
-    cJSON_AddStringToObject(root, "ap_ip", "0.0.0.0"); // retrieve current ip
-    cJSON_AddStringToObject(root, "sta_ssid", net.sta.ssid);
-    cJSON_AddStringToObject(root, "sta_ip", "0.0.0.0");
+
+    cJSON_AddStringToObject(root, "mac_address", wifi.getMacAddress());
+
+    cJSON* ap = cJSON_CreateObject();
+    cJSON_AddBoolToObject(ap, "enabled", net.ap.enabled != 0);
+    cJSON_AddStringToObject(ap, "ssid", net.ap.ssid);
+    cJSON_AddStringToObject(ap, "ip", wifi.getApIp());
+    cJSON_AddItemToObject(root, "ap", ap);
+
+    cJSON* sta = cJSON_CreateObject();
+    cJSON_AddStringToObject(sta, "ssid", net.sta.ssid);
+    cJSON_AddStringToObject(sta, "ip", "0.0.0.0");
+    cJSON_AddItemToObject(root, "sta", sta);
 
     char* resp = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

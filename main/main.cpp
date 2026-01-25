@@ -42,11 +42,10 @@ extern "C" void app_main()
     }
 
     // --- INIT CONFIG MANAGER ---
-    ConfigManager& configManager = ConfigManager::getInstance();
+    ConfigManager::getInstance();
 
     // --- INIT WIFI MANAGER ---
-    static WiFiManager wifi;
-    wifi.init();
+    WiFiManager::getInstance().init();
 
     // --- INIT HTTP SERVER ---
     static HttpServer http_server;

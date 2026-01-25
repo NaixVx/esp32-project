@@ -9,6 +9,7 @@ idf_component_register(
     REQUIRES
         esp_http_server
         config_manager
+        wifi_manager
         json
         utils
 )

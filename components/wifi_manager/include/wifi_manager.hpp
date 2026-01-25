@@ -10,11 +10,16 @@
 class WiFiManager
 {
   public:
+    static WiFiManager& getInstance();
+
     WiFiManager();
     ~WiFiManager();
 
     void init();
     void syncWithConfig();
+
+    const char* getMacAddress() const;
+    const char* getApIp() const;
 
   private:
     esp_netif_t* ap_netif_{nullptr};
@@ -22,6 +27,8 @@ class WiFiManager
     SemaphoreHandle_t mutex_{nullptr};
 
     bool ap_running_{false};
+    char mac_address_[MAC_ADDR_LEN]{};
+    char ap_ip_[IP_ADDR_LEN]{"0.0.0.0"};
 
     static void
     onWiFiEvent(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);

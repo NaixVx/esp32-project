@@ -21,14 +21,18 @@ async function loadNetworkStatus() {
 
     const data = await res.json();
 
-    document.getElementById("mac_address").textContent = data.mac_address || "-";
-
-    document.getElementById("ap_enabled").checked = !!data.ap_enabled;
-    document.getElementById("ap_ssid").value = data.ap_ssid || "";
-    document.getElementById("ap_ip").textContent = data.ap_ip || "-";
-
-    document.getElementById("sta_ssid").value = data.sta_ssid || "";
-    document.getElementById("sta_ip").textContent = data.sta_ip || "-";
+    document.getElementById("mac_address").textContent =
+        data.mac_address || "-";
+    document.getElementById("ap_enabled").checked =
+        !!data.ap?.enabled;
+    document.getElementById("ap_ssid").value =
+        data.ap?.ssid || "";
+    document.getElementById("ap_ip").textContent =
+        data.ap?.ip || "-";
+    document.getElementById("sta_ssid").value =
+        data.sta?.ssid || "";
+    document.getElementById("sta_ip").textContent =
+        data.sta?.ip || "-";
 }
 
 document.getElementById("device-form").addEventListener("submit", async (e) => {

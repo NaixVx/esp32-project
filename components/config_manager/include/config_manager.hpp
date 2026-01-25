@@ -45,8 +45,6 @@ struct NetworkConfigSTA {
 };
 
 struct NetworkConfig {
-    char mac_address[MAC_ADDR_LEN];
-    uint8_t _pad[2];
     NetworkConfigAP ap{};
     NetworkConfigSTA sta{};
 };
