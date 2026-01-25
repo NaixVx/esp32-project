@@ -1,23 +1,88 @@
-# ESP32 Project (ESP-IDF, C++)
+# ESP32 ESP-IDF C++ Base Project Template
 
-This is a personal C++ ESP-IDF based project for the ESP32 microcontroller.
+This repository is a reusable **ESP-IDF (v5.5+) C++ project template** for ESP32.
+It is intended to be used as a base for multiple projects by adding new components.
 
-## ⚙️ Used Hardware
+## Features
 
-- ESP32-DevKitC v1 (ESP-WROOM-32)
-- DS18B20 temperature sensor
+- ESP-IDF 5.5+ compatible
+- C++ project structure
+- Wi-Fi support:
+  - Access Point (AP)
+  - Station (STA)
+- Non-Volatile Storage (NVS) for persistent settings
+- Simple HTTP API (GET / POST)
+- Web-based configuration UI
+  - Root endpoint (`/`)
+  - HTML, CSS, and JavaScript stored in LittleFS
+- Custom partition table with LittleFS support
+- Modular, component-based design
 
-## 🚀 Getting Started
+## Project Structure
 
-1. **Set up ESP-IDF:**  
-   Follow the official ESP-IDF [getting started guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/).
+- `main/` – Application entry point
+- `components/` – Reusable components
+- `partitions.csv` – Custom partition table
+- `.gitmodules` – External dependencies (e.g. LittleFS)
 
-2. **Build and Flash:**
-   ```bash
-   idf.py build
-   idf.py -p /dev/ttyUSB0 flash monitor
-   ```
+## Requirements
 
-## 📜 License
+- ESP-IDF **5.5 or newer**
+- ESP32-compatible board
 
-MIT License.
+## Getting Started
+
+### 1. Install ESP-IDF 5.5+
+
+Follow the official ESP-IDF installation guide.
+
+### 2. Clone the repository
+
+```bash
+git clone <repo-url>
+cd <repo-name>
+```
+
+### 3. Initialize submodules
+
+```
+git submodule update --init --recursive
+```
+
+### 4. Export ESP-IDF environment
+
+```
+. $IDF_PATH/export.sh
+```
+
+### 5. Configure the project
+
+```
+idf.py menuconfig
+```
+
+Set Partition Table → Custom partition table
+Ensure LittleFS support is enabled
+
+### 6. Build and flash
+
+```
+idf.py build
+idf.py flash monitor
+```
+
+## Usage
+
+- On first boot, the device starts in Access Point (AP) mode
+- Connect to the AP and open the root endpoint (`192.168.4.1/`) in a browser
+- Use the web UI to configure Wi-Fi and system settings
+
+## Extending the Template
+
+- Add new functionality by creating additional components
+- Modify or extend the web UI via the www/ directory
+- Reuse this repository as a base for multiple ESP32 projects
+
+## License
+
+MIT License
