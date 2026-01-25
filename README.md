@@ -45,19 +45,19 @@ cd <repo-name>
 
 ### 3. Initialize submodules
 
-```
+```bash
 git submodule update --init --recursive
 ```
 
 ### 4. Export ESP-IDF environment
 
-```
+```bash
 . $IDF_PATH/export.sh
 ```
 
 ### 5. Configure the project
 
-```
+```bash
 idf.py menuconfig
 ```
 
@@ -66,7 +66,7 @@ Ensure LittleFS support is enabled
 
 ### 6. Build and flash
 
-```
+```bash
 idf.py build
 idf.py flash monitor
 ```
