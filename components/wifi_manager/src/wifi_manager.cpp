@@ -47,6 +47,7 @@ void WiFiManager::init()
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     ap_netif_ = esp_netif_create_default_wifi_ap();
+    sta_netif_ = esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t wifi_cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&wifi_cfg));
@@ -134,6 +135,35 @@ void WiFiManager::scheduleReconfigureAP()
     ESP_ERROR_CHECK(esp_timer_start_once(timer, 300000)); // 300 ms
 }
 
+void WiFiManager::startSTA(const NetworkConfigSTA& sta)
+{
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    applyConfigSTA(sta);
+    ESP_ERROR_CHECK(esp_wifi_connect());
+    sta_running_ = true;
+}
+
+void WiFiManager::stopSTA()
+{
+    esp_wifi_disconnect();
+    sta_running_ = false;
+}
+
+void WiFiManager::applyConfigSTA(const NetworkConfigSTA& sta)
+{
+    wifi_config_t cfg{};
+    std::strncpy(reinterpret_cast<char*>(cfg.sta.ssid), sta.ssid, sizeof(cfg.sta.ssid) - 1);
+    std::strncpy(reinterpret_cast<char*>(cfg.sta.password),
+        sta.password,
+        sizeof(cfg.sta.password) - 1);
+
+    cfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+    cfg.sta.pmf_cfg.capable = true;
+    cfg.sta.pmf_cfg.required = false;
+
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &cfg));
+}
+
 void WiFiManager::syncWithConfig()
 {
     NetworkConfig net = ConfigManager::getInstance().getNetworkConfig();
@@ -156,6 +186,18 @@ void WiFiManager::syncWithConfig()
 
     // AP already running → update config in place
     applyConfigAP(net.ap);
+
+    bool sta_enabled = std::strlen(net.sta.ssid) > 0;
+
+    if (!sta_enabled) {
+        if (sta_running_) {
+            stopSTA();
+        }
+    } else if (!sta_running_) {
+        startSTA(net.sta);
+    } else {
+        applyConfigSTA(net.sta);
+    }
 }
 
 void WiFiManager::onWiFiEvent(void* arg,
@@ -190,6 +232,19 @@ void WiFiManager::onWiFiEvent(void* arg,
 
             break;
         }
+
+        case WIFI_EVENT_STA_START:
+            ESP_LOGI(TAG, "STA started");
+            break;
+
+        case WIFI_EVENT_STA_CONNECTED:
+            ESP_LOGI(TAG, "STA connected");
+            break;
+
+        case WIFI_EVENT_STA_DISCONNECTED:
+            ESP_LOGW(TAG, "STA disconnected, retrying");
+            esp_wifi_connect();
+            break;
 
         default:
             break;

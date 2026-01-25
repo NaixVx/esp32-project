@@ -52,18 +52,38 @@ document.getElementById("device-form").addEventListener("submit", async (e) => {
     }
 });
 
-document.getElementById("network-form").addEventListener("submit", async (e) => {
+document.getElementById("ap-form").addEventListener("submit", async (e) => {
     e.preventDefault();
 
     const payload = {
         ap_enabled: document.getElementById("ap_enabled").checked,
         ap_ssid: document.getElementById("ap_ssid").value.trim(),
         ap_password: document.getElementById("ap_password").value,
-        sta_ssid: document.getElementById("sta_ssid").value.trim(),
-        sta_password: document.getElementById("sta_password").value,
     };
 
     const res = await fetch("/api/network/ap/set", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+        await loadNetworkStatus();
+    }
+});
+
+document.getElementById("sta-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const ssid = document.getElementById("sta_ssid").value.trim();
+    const password = document.getElementById("sta_password").value;
+
+    const payload = {
+        sta_ssid: ssid.length > 0 ? ssid : null,
+        sta_password: password,
+    };
+
+    const res = await fetch("/api/network/sta/set", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

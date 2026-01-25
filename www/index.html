@@ -37,9 +37,10 @@
     <div class="card">
         <h2>Network Config</h2>
         <p class="meta"><strong>MAC Address:</strong> <span id="mac_address"></span></p>
-        <form id="network-form">
-            <div class="sub-card">
-                <h3>Access Point</h3>
+
+        <div class="sub-card">
+            <h3>Access Point</h3>
+            <form id="ap-form">
                 <ul>
                     <li><label>IP Address:</label> <span id="ap_ip"></span></li>
                     <li>
@@ -56,9 +57,12 @@
                     </li>
                 </ul>
                 <button type="submit">Save</button>
-            </div>
-            <div class="sub-card">
-                <h3>WiFi (STA)</h3>
+            </form>
+        </div>
+
+        <div class="sub-card">
+            <h3>WiFi (STA)</h3>
+            <form id="sta-form">
                 <ul>
                     <li><label>IP Address:</label> <span id="sta_ip"></span></li>
                     <li>
@@ -72,9 +76,8 @@
                     </li>
                 </ul>
                 <button type="submit">Save</button>
-            </div>
-
-        </form>
+            </form>
+        </div>
     </div>
     <a href="https://github.com/NaixVx/esp32-project" target="_blank" rel="noopener">
         GitHub

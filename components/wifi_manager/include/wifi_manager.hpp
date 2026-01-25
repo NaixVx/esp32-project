@@ -30,6 +30,9 @@ class WiFiManager
     char mac_address_[MAC_ADDR_LEN]{};
     char ap_ip_[IP_ADDR_LEN]{"0.0.0.0"};
 
+    esp_netif_t* sta_netif_{nullptr};
+    bool sta_running_{false};
+
     static void
     onWiFiEvent(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
 
@@ -37,4 +40,8 @@ class WiFiManager
     void stopAP();
     void applyConfigAP(const NetworkConfigAP& ap);
     void scheduleReconfigureAP();
+
+    void startSTA(const NetworkConfigSTA& sta);
+    void stopSTA();
+    void applyConfigSTA(const NetworkConfigSTA& sta);
 };
