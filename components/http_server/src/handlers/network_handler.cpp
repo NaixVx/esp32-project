@@ -47,7 +47,7 @@ static esp_err_t networkStatusHandler(httpd_req_t* req)
 
     cJSON* sta = cJSON_CreateObject();
     cJSON_AddStringToObject(sta, "ssid", net.sta.ssid);
-    cJSON_AddStringToObject(sta, "ip", "0.0.0.0");
+    cJSON_AddStringToObject(sta, "ip", wifi.getStaIp());
     cJSON_AddItemToObject(root, "sta", sta);
 
     char* resp = cJSON_PrintUnformatted(root);

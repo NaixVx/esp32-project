@@ -55,6 +55,9 @@ void WiFiManager::init()
     ESP_ERROR_CHECK(
         esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::onWiFiEvent, this));
 
+    ESP_ERROR_CHECK(
+        esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::onWiFiEvent, this));
+
     ConfigManager::getInstance().registerNetworkObserver(
         [this](const NetworkConfig&) { this->scheduleReconfigureAP(); });
 
@@ -135,6 +138,12 @@ void WiFiManager::scheduleReconfigureAP()
     ESP_ERROR_CHECK(esp_timer_start_once(timer, 300000)); // 300 ms
 }
 
+const char* WiFiManager::getStaIp() const
+{
+    LockGuard guard(mutex_);
+    return sta_ip_;
+}
+
 void WiFiManager::startSTA(const NetworkConfigSTA& sta)
 {
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
@@ -170,33 +179,33 @@ void WiFiManager::syncWithConfig()
 
     LockGuard guard(mutex_);
 
+    /* --- AP --- */
     if (!net.ap.enabled) {
         if (ap_running_) {
             stopAP();
         }
-        return;
+    } else {
+        if (!ap_running_) {
+            startAP(net.ap);
+            ap_running_ = true;
+        } else {
+            applyConfigAP(net.ap);
+        }
     }
 
-    // AP enabled
-    if (!ap_running_) {
-        startAP(net.ap);
-        ap_running_ = true;
-        return;
-    }
-
-    // AP already running → update config in place
-    applyConfigAP(net.ap);
-
+    /* --- STA --- */
     bool sta_enabled = std::strlen(net.sta.ssid) > 0;
 
     if (!sta_enabled) {
         if (sta_running_) {
             stopSTA();
         }
-    } else if (!sta_running_) {
-        startSTA(net.sta);
     } else {
-        applyConfigSTA(net.sta);
+        if (!sta_running_) {
+            startSTA(net.sta);
+        } else {
+            applyConfigSTA(net.sta);
+        }
     }
 }
 
@@ -245,6 +254,31 @@ void WiFiManager::onWiFiEvent(void* arg,
             ESP_LOGW(TAG, "STA disconnected, retrying");
             esp_wifi_connect();
             break;
+
+        default:
+            break;
+        }
+    }
+
+    if (event_base == IP_EVENT) {
+        switch (event_id) {
+
+        case IP_EVENT_STA_GOT_IP: {
+            auto* event = static_cast<ip_event_got_ip_t*>(event_data);
+
+            LockGuard guard(self->mutex_);
+            snprintf(self->sta_ip_, sizeof(self->sta_ip_), IPSTR, IP2STR(&event->ip_info.ip));
+
+            ESP_LOGI(TAG, "STA got IP: %s", self->sta_ip_);
+            break;
+        }
+
+        case IP_EVENT_STA_LOST_IP: {
+            LockGuard guard(self->mutex_);
+            std::strcpy(self->sta_ip_, "0.0.0.0");
+            ESP_LOGW(TAG, "STA lost IP");
+            break;
+        }
 
         default:
             break;

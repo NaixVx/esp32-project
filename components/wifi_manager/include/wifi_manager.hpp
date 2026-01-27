@@ -20,18 +20,21 @@ class WiFiManager
 
     const char* getMacAddress() const;
     const char* getApIp() const;
+    const char* getStaIp() const;
 
   private:
     esp_netif_t* ap_netif_{nullptr};
 
     SemaphoreHandle_t mutex_{nullptr};
 
-    bool ap_running_{false};
     char mac_address_[MAC_ADDR_LEN]{};
+
+    bool ap_running_{false};
     char ap_ip_[IP_ADDR_LEN]{"0.0.0.0"};
 
     esp_netif_t* sta_netif_{nullptr};
     bool sta_running_{false};
+    char sta_ip_[IP_ADDR_LEN]{"0.0.0.0"};
 
     static void
     onWiFiEvent(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
