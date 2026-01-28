@@ -1,25 +1,32 @@
 #include "wifi_manager.hpp"
 #include "config_manager.hpp"
+
 #include <cstring>
+
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_timer.h"
 
 static const char* TAG = "wifi_manager";
 
+/* -------------------------------------------------------------------------- */
+/* Construction / Lifetime                                                     */
+/* -------------------------------------------------------------------------- */
+
 WiFiManager::WiFiManager()
 {
     mutex_ = xSemaphoreCreateMutex();
-    if (!mutex_) {
-        ESP_LOGE(TAG, "Failed to create mutex");
+    if (mutex_ == nullptr) {
+        ESP_LOGE(TAG, "Mutex creation failed");
         abort();
     }
 }
 
 WiFiManager::~WiFiManager()
 {
-    if (mutex_) {
+    if (mutex_ != nullptr) {
         vSemaphoreDelete(mutex_);
+        mutex_ = nullptr;
     }
 }
 
@@ -29,10 +36,15 @@ WiFiManager& WiFiManager::getInstance()
     return instance;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Initialization                                                              */
+/* -------------------------------------------------------------------------- */
+
 void WiFiManager::init()
 {
-    uint8_t mac[6];
+    uint8_t mac[6] = {};
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+
     snprintf(mac_address_,
         sizeof(mac_address_),
         "%02X:%02X:%02X:%02X:%02X:%02X",
@@ -49,8 +61,8 @@ void WiFiManager::init()
     ap_netif_ = esp_netif_create_default_wifi_ap();
     sta_netif_ = esp_netif_create_default_wifi_sta();
 
-    wifi_init_config_t wifi_cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&wifi_cfg));
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     ESP_ERROR_CHECK(
         esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::onWiFiEvent, this));
@@ -59,12 +71,16 @@ void WiFiManager::init()
         esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &WiFiManager::onWiFiEvent, this));
 
     ConfigManager::getInstance().registerNetworkObserver(
-        [this](const NetworkConfig&) { this->scheduleReconfigureAP(); });
+        [this](const NetworkConfig&) { scheduleConfigSync(); });
 
     syncWithConfig();
 
-    ESP_LOGI(TAG, "Wi-Fi config initialized");
+    ESP_LOGI(TAG, "Wi-Fi manager initialized");
 }
+
+/* -------------------------------------------------------------------------- */
+/* Public Getters                                                              */
+/* -------------------------------------------------------------------------- */
 
 const char* WiFiManager::getMacAddress() const
 {
@@ -73,95 +89,157 @@ const char* WiFiManager::getMacAddress() const
 
 const char* WiFiManager::getApIp() const
 {
-    LockGuard guard(mutex_);
+    LockGuard lock(mutex_);
     return ap_ip_;
-}
-
-void WiFiManager::startAP(const NetworkConfigAP& ap)
-{
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    applyConfigAP(ap);
-
-    ESP_LOGI(TAG, "AP started (SSID=%s)", ap.ssid);
-}
-
-void WiFiManager::stopAP()
-{
-    ESP_ERROR_CHECK(esp_wifi_stop());
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_NULL));
-
-    ap_running_ = false;
-
-    ESP_LOGI(TAG, "AP stopped");
-}
-
-void WiFiManager::applyConfigAP(const NetworkConfigAP& ap)
-{
-    wifi_config_t wifi_cfg{};
-    std::strncpy(reinterpret_cast<char*>(wifi_cfg.ap.ssid), ap.ssid, sizeof(wifi_cfg.ap.ssid) - 1);
-
-    std::strncpy(reinterpret_cast<char*>(wifi_cfg.ap.password),
-        ap.password,
-        sizeof(wifi_cfg.ap.password) - 1);
-
-    wifi_cfg.ap.ssid_len = std::strlen(reinterpret_cast<char*>(wifi_cfg.ap.ssid));
-    wifi_cfg.ap.max_connection = 4;
-    wifi_cfg.ap.channel = 1;
-    wifi_cfg.ap.authmode = std::strlen(ap.password) > 0 ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
-
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_cfg));
-
-    ESP_LOGI(TAG, "AP reconfigured (SSID=%s)", ap.ssid);
-}
-
-void WiFiManager::scheduleReconfigureAP()
-{
-    static esp_timer_handle_t timer = nullptr;
-
-    if (!timer) {
-        esp_timer_create_args_t args{};
-        args.callback = [](void* arg) {
-            auto self = static_cast<WiFiManager*>(arg);
-            self->syncWithConfig();
-        };
-        args.arg = this;
-        args.dispatch_method = ESP_TIMER_TASK;
-        args.name = "ap_reconf";
-        args.skip_unhandled_events = false;
-
-        ESP_ERROR_CHECK(esp_timer_create(&args, &timer));
-    }
-
-    esp_timer_stop(timer);                                // debounce
-    ESP_ERROR_CHECK(esp_timer_start_once(timer, 300000)); // 300 ms
 }
 
 const char* WiFiManager::getStaIp() const
 {
-    LockGuard guard(mutex_);
+    LockGuard lock(mutex_);
     return sta_ip_;
 }
 
-void WiFiManager::startSTA(const NetworkConfigSTA& sta)
+/* -------------------------------------------------------------------------- */
+/* Configuration Synchronization                                               */
+/* -------------------------------------------------------------------------- */
+
+void WiFiManager::syncWithConfig()
 {
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
-    applyConfigSTA(sta);
+    NetworkConfig net = ConfigManager::getInstance().getNetworkConfig();
+
+    const bool ap_enabled = net.ap.enabled;
+    const bool sta_enabled = std::strlen(net.sta.ssid) > 0;
+
+    LockGuard lock(mutex_);
+
+    updateWifiMode(ap_enabled, sta_enabled);
+
+    if (ap_enabled) {
+        if (!ap_running_) {
+            enableAp(net.ap);
+        } else {
+            configureAp(net.ap);
+        }
+    } else if (ap_running_) {
+        disableAp();
+    }
+
+    if (sta_enabled) {
+        if (!sta_running_) {
+            enableSta(net.sta);
+        } else {
+            configureSta(net.sta);
+        }
+    } else if (sta_running_) {
+        disableSta();
+    }
+}
+
+void WiFiManager::scheduleConfigSync()
+{
+    static esp_timer_handle_t timer = nullptr;
+
+    if (timer == nullptr) {
+        esp_timer_create_args_t args = {};
+        args.callback = [](void* arg) {
+            static_cast<WiFiManager*>(arg)->syncWithConfig();
+        };
+        args.arg = this;
+        args.dispatch_method = ESP_TIMER_TASK;
+        args.name = "wifi_cfg_sync";
+
+        ESP_ERROR_CHECK(esp_timer_create(&args, &timer));
+    }
+
+    esp_timer_stop(timer);
+    ESP_ERROR_CHECK(esp_timer_start_once(timer, 300000)); /* 300 ms */
+}
+
+/* -------------------------------------------------------------------------- */
+/* Wi-Fi Mode Control                                                          */
+/* -------------------------------------------------------------------------- */
+
+void WiFiManager::updateWifiMode(bool ap_enabled, bool sta_enabled)
+{
+    wifi_mode_t mode = WIFI_MODE_NULL;
+
+    if (ap_enabled && sta_enabled) {
+        mode = WIFI_MODE_APSTA;
+    } else if (ap_enabled) {
+        mode = WIFI_MODE_AP;
+    } else if (sta_enabled) {
+        mode = WIFI_MODE_STA;
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(mode));
+
+    if (mode == WIFI_MODE_NULL) {
+        ESP_ERROR_CHECK(esp_wifi_stop());
+    } else {
+        ESP_ERROR_CHECK(esp_wifi_start());
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Access Point Control                                                        */
+/* -------------------------------------------------------------------------- */
+
+void WiFiManager::enableAp(const NetworkConfigAP& ap)
+{
+    configureAp(ap);
+    ap_running_ = true;
+
+    ESP_LOGI(TAG, "AP enabled (SSID=%s)", ap.ssid);
+}
+
+void WiFiManager::disableAp()
+{
+    ap_running_ = false;
+    ESP_LOGI(TAG, "AP disabled");
+}
+
+void WiFiManager::configureAp(const NetworkConfigAP& ap)
+{
+    wifi_config_t cfg = {};
+
+    std::strncpy(reinterpret_cast<char*>(cfg.ap.ssid), ap.ssid, sizeof(cfg.ap.ssid) - 1);
+
+    std::strncpy(reinterpret_cast<char*>(cfg.ap.password),
+        ap.password,
+        sizeof(cfg.ap.password) - 1);
+
+    cfg.ap.ssid_len = std::strlen(reinterpret_cast<char*>(cfg.ap.ssid));
+    cfg.ap.max_connection = 4;
+    cfg.ap.channel = 1;
+    cfg.ap.authmode = (std::strlen(ap.password) > 0) ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
+
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &cfg));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Station Control                                                             */
+/* -------------------------------------------------------------------------- */
+
+void WiFiManager::enableSta(const NetworkConfigSTA& sta)
+{
+    configureSta(sta);
     ESP_ERROR_CHECK(esp_wifi_connect());
     sta_running_ = true;
 }
 
-void WiFiManager::stopSTA()
+void WiFiManager::disableSta()
 {
     esp_wifi_disconnect();
+    std::strcpy(sta_ip_, "0.0.0.0");
     sta_running_ = false;
 }
 
-void WiFiManager::applyConfigSTA(const NetworkConfigSTA& sta)
+void WiFiManager::configureSta(const NetworkConfigSTA& sta)
 {
-    wifi_config_t cfg{};
+    wifi_config_t cfg = {};
+
     std::strncpy(reinterpret_cast<char*>(cfg.sta.ssid), sta.ssid, sizeof(cfg.sta.ssid) - 1);
+
     std::strncpy(reinterpret_cast<char*>(cfg.sta.password),
         sta.password,
         sizeof(cfg.sta.password) - 1);
@@ -173,59 +251,26 @@ void WiFiManager::applyConfigSTA(const NetworkConfigSTA& sta)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &cfg));
 }
 
-void WiFiManager::syncWithConfig()
-{
-    NetworkConfig net = ConfigManager::getInstance().getNetworkConfig();
-
-    LockGuard guard(mutex_);
-
-    /* --- AP --- */
-    if (!net.ap.enabled) {
-        if (ap_running_) {
-            stopAP();
-        }
-    } else {
-        if (!ap_running_) {
-            startAP(net.ap);
-            ap_running_ = true;
-        } else {
-            applyConfigAP(net.ap);
-        }
-    }
-
-    /* --- STA --- */
-    bool sta_enabled = std::strlen(net.sta.ssid) > 0;
-
-    if (!sta_enabled) {
-        if (sta_running_) {
-            stopSTA();
-        }
-    } else {
-        if (!sta_running_) {
-            startSTA(net.sta);
-        } else {
-            applyConfigSTA(net.sta);
-        }
-    }
-}
+/* -------------------------------------------------------------------------- */
+/* Event Handling                                                              */
+/* -------------------------------------------------------------------------- */
 
 void WiFiManager::onWiFiEvent(void* arg,
     esp_event_base_t event_base,
     int32_t event_id,
     void* event_data)
 {
-    auto self = static_cast<WiFiManager*>(arg);
+    auto* self = static_cast<WiFiManager*>(arg);
 
     if (event_base == WIFI_EVENT) {
+
         switch (event_id) {
 
         case WIFI_EVENT_AP_START: {
-            ESP_LOGI(TAG, "AP interface started");
+            LockGuard lock(self->mutex_);
 
-            LockGuard guard(self->mutex_);
-
-            if (self->ap_netif_) {
-                esp_netif_ip_info_t ip;
+            if (self->ap_netif_ != nullptr) {
+                esp_netif_ip_info_t ip = {};
                 if (esp_netif_get_ip_info(self->ap_netif_, &ip) == ESP_OK) {
                     snprintf(self->ap_ip_, sizeof(self->ap_ip_), IPSTR, IP2STR(&ip.ip));
                 }
@@ -233,21 +278,9 @@ void WiFiManager::onWiFiEvent(void* arg,
             break;
         }
 
-        case WIFI_EVENT_AP_STOP: {
-            ESP_LOGI(TAG, "AP interface stopped");
-
-            LockGuard guard(self->mutex_);
-            std::strcpy(self->ap_ip_, "null");
-
-            break;
-        }
-
-        case WIFI_EVENT_STA_START:
-            ESP_LOGI(TAG, "STA started");
-            break;
-
-        case WIFI_EVENT_STA_CONNECTED:
-            ESP_LOGI(TAG, "STA connected");
+        case WIFI_EVENT_AP_STOP:
+            LockGuard(self->mutex_);
+            std::strcpy(self->ap_ip_, "0.0.0.0");
             break;
 
         case WIFI_EVENT_STA_DISCONNECTED:
@@ -261,24 +294,21 @@ void WiFiManager::onWiFiEvent(void* arg,
     }
 
     if (event_base == IP_EVENT) {
+
         switch (event_id) {
 
         case IP_EVENT_STA_GOT_IP: {
             auto* event = static_cast<ip_event_got_ip_t*>(event_data);
+            LockGuard lock(self->mutex_);
 
-            LockGuard guard(self->mutex_);
             snprintf(self->sta_ip_, sizeof(self->sta_ip_), IPSTR, IP2STR(&event->ip_info.ip));
-
-            ESP_LOGI(TAG, "STA got IP: %s", self->sta_ip_);
             break;
         }
 
-        case IP_EVENT_STA_LOST_IP: {
-            LockGuard guard(self->mutex_);
+        case IP_EVENT_STA_LOST_IP:
+            LockGuard(self->mutex_);
             std::strcpy(self->sta_ip_, "0.0.0.0");
-            ESP_LOGW(TAG, "STA lost IP");
             break;
-        }
 
         default:
             break;
