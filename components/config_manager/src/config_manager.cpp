@@ -304,10 +304,20 @@ void ConfigManager::setDefaults()
     sanitize_persisted(persisted_);
 }
 
-esp_err_t ConfigManager::resetToDefaults()
+void ConfigManager::resetToDefaults()
 {
+    ESP_LOGW(TAG, "Resetting configuration to factory defaults");
+
     setDefaults();
-    return saveToNVS();
+
+    esp_err_t err = saveToNVS();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to save defaults to NVS: %s", esp_err_to_name(err));
+    }
+
+    ESP_LOGW(TAG, "Rebooting after factory reset");
+    vTaskDelay(pdMS_TO_TICKS(200));
+    esp_restart();
 }
 
 bool ConfigManager::isValid()

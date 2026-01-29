@@ -4,9 +4,10 @@ idf_component_register(
     INCLUDE_DIRS
         "."
     REQUIRES
-        wifi_manager
         nvs_flash
-        config_manager
-        http_server
         esp_littlefs
+        config_manager
+        wifi_manager
+        http_server
+        factory_reset
 )

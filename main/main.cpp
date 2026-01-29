@@ -1,13 +1,16 @@
 #include <stdio.h>
 
-#include "config_manager.hpp"
+#include "nvs_flash.h"
+#include "esp_littlefs.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "http_server.hpp"
-#include "nvs_flash.h"
-#include "wifi_manager.hpp"
 #include "esp_log.h"
-#include "esp_littlefs.h"
+
+#include "config_manager.hpp"
+#include "http_server.hpp"
+#include "wifi_manager.hpp"
+#include "factory_reset.hpp"
 
 static const char* TAG = "main";
 
@@ -40,6 +43,10 @@ extern "C" void app_main()
     } else {
         ESP_LOGI(TAG, "LittleFS mounted at /www");
     }
+
+    // --- INIT FACOTRY RESET ---
+    static FactoryReset factory_reset;
+    factory_reset.init(GPIO_NUM_13);
 
     // --- INIT CONFIG MANAGER ---
     ConfigManager::getInstance();

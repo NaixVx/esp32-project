@@ -160,7 +160,7 @@ class ConfigManager
     /**
      * @brief Reset configuration to defaults and persist it.
      */
-    esp_err_t resetToDefaults();
+    void resetToDefaults();
 
     /**
      * @brief Validate current configuration contents.
