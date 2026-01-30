@@ -10,4 +10,5 @@ idf_component_register(
         wifi_manager
         http_server
         factory_reset
+        temperature_sensor
 )

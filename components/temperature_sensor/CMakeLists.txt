@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
-        "src/ds18b20.cpp"
+        "src/temperature_sensor.cpp"
+        "src/driver/ds18b20.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES
