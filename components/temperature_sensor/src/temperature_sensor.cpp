@@ -1,77 +1,93 @@
-// temperature_sensor.cpp
 #include "temperature_sensor.hpp"
-#include "driver/ds18b20.hpp"
 
+#include "driver/ds18b20.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 
-#include <mutex>
+#include "utils/lock_guard.hpp"
 
 static const char* TAG = "temperature_sensor";
 
 namespace temperature_sensor
 {
 
-static DS18B20* sensor = nullptr;
+static DS18B20 sensor(gpio_num_t::GPIO_NUM_NC);
 static bool initialized = false;
 
-static float last_temperature = 0.0f;
-static bool sensor_ok = false;
+static float last_temperature_C = 0.0f;
+static status_t sensor_status = status_t::UNINITIALIZED;
 
-static std::mutex mutex;
+static SemaphoreHandle_t data_mutex = nullptr;
+static TaskHandle_t sensor_task_handle = nullptr;
 
-static void sensorTask(void*);
+static void sensor_task(void*);
 
-void init(gpio_num_t pin)
+void init(gpio_num_t data_pin)
 {
     if (initialized) {
         return;
     }
 
-    static DS18B20 static_sensor(pin);
-    sensor = &static_sensor;
-
-    if (!sensor->init()) {
-        ESP_LOGE(TAG, "DS18B20 init failed");
+    data_mutex = xSemaphoreCreateMutex();
+    if (data_mutex == nullptr) {
+        ESP_LOGE(TAG, "Mutex creation failed");
+        return;
     }
 
-    xTaskCreate(sensorTask, "ds18b20_task", 4096, nullptr, 2, nullptr);
+    sensor = DS18B20(data_pin);
+
+    if (!sensor.init()) {
+        ESP_LOGE(TAG, "DS18B20 init failed");
+        sensor_status = status_t::ERROR;
+    }
+
+    if (xTaskCreate(sensor_task,
+            "ds18b20_task",
+            4096,
+            nullptr,
+            tskIDLE_PRIORITY + 1,
+            &sensor_task_handle) != pdPASS) {
+        ESP_LOGE(TAG, "Task creation failed");
+        sensor_status = status_t::ERROR;
+        return;
+    }
+
+    ESP_LOGI(TAG, "Initialized");
     initialized = true;
 }
 
-float getLastTemperature()
+float get_last_temperature_C(void)
 {
-    std::lock_guard<std::mutex> lock(mutex);
-    return last_temperature;
+    LockGuard lock(data_mutex);
+    return last_temperature_C;
 }
 
-bool getStatus()
+status_t get_status(void)
 {
-    std::lock_guard<std::mutex> lock(mutex);
-    return sensor_ok;
+    LockGuard lock(data_mutex);
+    return sensor_status;
 }
 
-static void sensorTask(void*)
+static void sensor_task(void*)
 {
-    // Allow sensor power-up and first conversion
     vTaskDelay(pdMS_TO_TICKS(1000));
 
-    while (true) {
-        float temp = sensor->readTemperature();
-
-        bool ok = (temp > -55.0f && temp < 125.0f);
-
-        if (ok) {
-            ESP_LOGI(TAG, "Temperature: %.2f C", temp);
-        } else {
-            ESP_LOGW(TAG, "Invalid temperature reading: %.2f", temp);
-        }
+    for (;;) {
+        const float temp_C = sensor.readTemperature();
+        const bool valid = (temp_C > -55.0f) && (temp_C < 125.0f);
 
         {
-            std::lock_guard<std::mutex> lock(mutex);
-            last_temperature = temp;
-            sensor_ok = ok;
+            LockGuard lock(data_mutex);
+            last_temperature_C = temp_C;
+            sensor_status = valid ? status_t::OK : status_t::ERROR;
+        }
+
+        if (valid) {
+            ESP_LOGI(TAG, "Temperature: %.2f C", temp_C);
+        } else {
+            ESP_LOGW(TAG, "Invalid temperature reading: %.2f", temp_C);
         }
 
         vTaskDelay(pdMS_TO_TICKS(2000));
