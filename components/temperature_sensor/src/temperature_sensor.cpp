@@ -1,18 +1,24 @@
+// temperature_sensor.cpp
 #include "temperature_sensor.hpp"
 #include "driver/ds18b20.hpp"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_log.h"
+
+#include <mutex>
+
+static const char* TAG = "temperature_sensor";
 
 namespace temperature_sensor
 {
 
 static DS18B20* sensor = nullptr;
-static gpio_num_t sensor_pin;
 static bool initialized = false;
 
 static float last_temperature = 0.0f;
 static bool sensor_ok = false;
+
 static std::mutex mutex;
 
 static void sensorTask(void*);
@@ -23,11 +29,14 @@ void init(gpio_num_t pin)
         return;
     }
 
-    sensor_pin = pin;
     static DS18B20 static_sensor(pin);
     sensor = &static_sensor;
 
-    xTaskCreate(sensorTask, "ds18b20_task", 4096, nullptr, 1, nullptr);
+    if (!sensor->init()) {
+        ESP_LOGE(TAG, "DS18B20 init failed");
+    }
+
+    xTaskCreate(sensorTask, "ds18b20_task", 4096, nullptr, 2, nullptr);
     initialized = true;
 }
 
@@ -45,13 +54,18 @@ bool getStatus()
 
 static void sensorTask(void*)
 {
-    while (true) {
-        float temp = 0.0f;
-        bool ok = false;
+    // Allow sensor power-up and first conversion
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
-        if (sensor && sensor->init()) {
-            temp = sensor->readTemperature();
-            ok = (temp > -100.0f);
+    while (true) {
+        float temp = sensor->readTemperature();
+
+        bool ok = (temp > -55.0f && temp < 125.0f);
+
+        if (ok) {
+            ESP_LOGI(TAG, "Temperature: %.2f C", temp);
+        } else {
+            ESP_LOGW(TAG, "Invalid temperature reading: %.2f", temp);
         }
 
         {

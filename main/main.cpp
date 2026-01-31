@@ -61,9 +61,4 @@ extern "C" void app_main()
 
     // --- OTHER COMPONENTS ---
     temperature_sensor::init(GPIO_NUM_4);
-    if (temperature_sensor::getStatus()) {
-        ESP_LOGI(TAG, "Temperature: %d", temperature_sensor::getLastTemperature());
-    } else {
-        ESP_LOGE(TAG, "Sensor error");
-    }
 }

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <mutex>
 #include "driver/gpio.h"
 
 namespace temperature_sensor
