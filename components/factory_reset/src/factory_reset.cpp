@@ -1,11 +1,11 @@
 #include "factory_reset.hpp"
 
+#include "config_manager.hpp"
+
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
-#include "config_manager.hpp"
 
 static const char *TAG = "factory_reset";
 

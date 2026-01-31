@@ -1,11 +1,12 @@
 #include "handlers/device_handler.hpp"
 
+#include "config_manager.hpp"
 #include "utils/http_utils.hpp"
 
 #include "cJSON.h"
-#include "config_manager.hpp"
 #include "esp_http_server.h"
 #include "esp_log.h"
+
 #include <algorithm>
 
 static const char *TAG = "device_handler";

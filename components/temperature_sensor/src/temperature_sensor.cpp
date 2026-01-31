@@ -1,12 +1,12 @@
 #include "temperature_sensor.hpp"
 
 #include "driver/ds18b20.hpp"
+#include "utils/lock_guard.hpp"
+
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-
-#include "utils/lock_guard.hpp"
 
 static const char *TAG = "temperature_sensor";
 

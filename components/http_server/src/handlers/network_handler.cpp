@@ -1,12 +1,13 @@
 #include "handlers/network_handler.hpp"
 
+#include "config_manager.hpp"
 #include "utils/http_utils.hpp"
 #include "wifi_manager.hpp"
 
 #include "cJSON.h"
-#include "config_manager.hpp"
 #include "esp_http_server.h"
 #include "esp_log.h"
+
 #include <algorithm>
 
 static const char *TAG = "network_handler";
@@ -254,7 +255,13 @@ void Handlers::registerNetworkEndpoints(httpd_handle_t server, void *ctx) {
                              .method = HTTP_OPTIONS,
                              .handler = optionsAny,
                              .user_ctx = ctx};
-  httpd_register_uri_handler(server, &options_api);
+  err = httpd_register_uri_handler(server, &options_api);
+  if (err == ESP_OK) {
+    ESP_LOGI(TAG, "Registered OPTIONS /api/network/");
+  } else {
+    ESP_LOGE(TAG, "Failed to register OPTIONS /api/network/: %s",
+             esp_err_to_name(err));
+  }
 
   // GET /api/network/status
   httpd_uri_t get_network_status_uri = {.uri = "/api/network/status",

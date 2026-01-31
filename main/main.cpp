@@ -1,17 +1,16 @@
-#include <stdio.h>
-
-#include "esp_littlefs.h"
-#include "nvs_flash.h"
-
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
 #include "config_manager.hpp"
 #include "factory_reset.hpp"
 #include "http_server.hpp"
 #include "temperature_sensor.hpp"
 #include "wifi_manager.hpp"
+
+#include "esp_littlefs.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "nvs_flash.h"
+
+#include <stdio.h>
 
 static const char *TAG = "main";
 

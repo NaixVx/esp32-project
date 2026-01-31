@@ -1,15 +1,15 @@
 #pragma once
 
-#include <cstdint>
-#include <cstring>
-#include <functional>
-#include <vector>
+#include "utils/lock_guard.hpp"
 
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "utils/lock_guard.hpp"
 
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <vector>
 /**
  * @file config_manager.hpp
  * @brief Persistent device and network configuration manager.

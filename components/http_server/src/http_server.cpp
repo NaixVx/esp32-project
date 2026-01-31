@@ -1,12 +1,11 @@
 #include "http_server.hpp"
 
-#include "esp_log.h"
-
-// Handlers
 #include "handlers/device_handler.hpp"
 #include "handlers/network_handler.hpp"
 #include "handlers/root_handler.hpp"
 #include "handlers/sensor_handler.hpp"
+
+#include "esp_log.h"
 
 static const char *TAG = "http_server";
 

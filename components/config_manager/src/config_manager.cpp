@@ -1,13 +1,14 @@
 #include "config_manager.hpp"
 
-#include <algorithm>
-#include <cstring>
-#include <vector>
+#include "utils/lock_guard.hpp"
 
 #include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
-#include "utils/lock_guard.hpp"
+
+#include <algorithm>
+#include <cstring>
+#include <vector>
 
 static const char *TAG = "config_manager";
 

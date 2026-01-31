@@ -26,20 +26,22 @@ static esp_err_t optionsSensorState(httpd_req_t *req) {
 static esp_err_t sensorHandler(httpd_req_t *req) {
   ESP_LOGI(TAG, "GET /api/sensors/state");
 
+  int16_t temp_multiplied =
+      (int16_t)(temperature_sensor::get_last_temperature_C() * 10.0f + 0.5f);
+
   cJSON *root = cJSON_CreateObject();
   cJSON_AddNumberToObject(root, "id", 0);
-  cJSON_AddNumberToObject(root, "temperature",
-                          temperature_sensor::get_last_temperature_C());
   cJSON_AddNumberToObject(root, "status", temperature_sensor::get_status());
+  cJSON_AddNumberToObject(root, "temperature_c_x10", temp_multiplied);
 
   char *resp = cJSON_PrintUnformatted(root);
   cJSON_Delete(root);
 
   set_json_headers(req);
 
-  esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
+  esp_err_t err = httpd_resp_send(req, resp, strlen(resp));
   free(resp);
-  return ret;
+  return err;
 }
 
 void Handlers::registerSensorEndpoints(httpd_handle_t server, void *ctx) {

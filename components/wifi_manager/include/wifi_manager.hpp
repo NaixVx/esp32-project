@@ -1,13 +1,13 @@
 #pragma once
 
 #include "config_manager.hpp"
+#include "utils/lock_guard.hpp"
 
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
 
 #include "freertos/semphr.h"
-#include "utils/lock_guard.hpp"
 
 class WiFiManager {
 public:

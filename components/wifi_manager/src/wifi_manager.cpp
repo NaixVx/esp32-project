@@ -1,11 +1,11 @@
 #include "wifi_manager.hpp"
 #include "config_manager.hpp"
 
-#include <cstring>
-
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_timer.h"
+
+#include <cstring>
 
 static const char *TAG = "wifi_manager";
 
