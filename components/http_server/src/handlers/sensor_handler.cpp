@@ -36,6 +36,7 @@ static esp_err_t sensorHandler(httpd_req_t *req) {
   cJSON_Delete(root);
 
   set_json_headers(req);
+
   esp_err_t ret = httpd_resp_send(req, resp, strlen(resp));
   free(resp);
   return ret;

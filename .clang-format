@@ -1,4 +1,5 @@
 # .clang-format — ESP32 Project Style (C/C++)
+
 BasedOnStyle: LLVM
 
 # === General Formatting ===
@@ -8,6 +9,7 @@ UseTab: Never
 ColumnLimit: 100
 PointerAlignment: Left
 DerivePointerAlignment: false
+ContinuationIndentWidth: 4
 ReflowComments: false
 SortIncludes: false
 IncludeBlocks: Preserve
@@ -26,16 +28,26 @@ BinPackArguments: false
 BinPackParameters: false
 AllowAllArgumentsOnNextLine: false
 AlignAfterOpenBracket: DontAlign
+AlwaysBreakAfterReturnType: None
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: true
+
+# === Alignment ===
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
 
 # === Braces & Lists ===
 BreakBeforeBraces: Linux
 BraceWrapping:
-  AfterEnum: true
-  AfterStruct: true
   AfterFunction: true
+  AfterStruct: true
+  AfterEnum: true
+  AfterControlStatement: true
   SplitEmptyFunction: true
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
+
 Cpp11BracedListStyle: true
 AllowShortBracedListsOnASingleLine: false
 
@@ -48,15 +60,18 @@ SpacesInCStyleCastParentheses: false
 SpaceAfterCStyleCast: false
 SpaceBeforeAssignmentOperators: true
 
-# === Penalties / Line Breaks ===
+# === Line Break Penalties ===
 PenaltyBreakBeforeFirstCallParameter: 100
 PenaltyBreakString: 1000
 PenaltyExcessCharacter: 1000000
 
 ---
 Language: Cpp
-# (C++-specific adjustments if needed later)
+AlwaysBreakTemplateDeclarations: No
 
 ---
 Language: C
-# C generally inherits from the Cpp section
+Cpp11BracedListStyle: false
+AllowShortFunctionsOnASingleLine: None
+PointerAlignment: Left
+IndentCaseLabels: false
