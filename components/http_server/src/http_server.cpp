@@ -3,9 +3,10 @@
 #include "esp_log.h"
 
 // Handlers
+#include "handlers/root_handler.hpp"
 #include "handlers/device_handler.hpp"
 #include "handlers/network_handler.hpp"
-#include "handlers/root_handler.hpp"
+#include "handlers/sensor_handler.hpp"
 
 static const char* TAG = "http_server";
 
@@ -16,6 +17,7 @@ void HttpServer::registerAllEndpoints()
     Handlers::registerRootEndpoints(server_handle, (void*)this);
     Handlers::registerDeviceEndpoints(server_handle, (void*)this);
     Handlers::registerNetworkEndpoints(server_handle, (void*)this);
+    Handlers::registerSensorEndpoints(server_handle, (void*)this);
 }
 
 void HttpServer::start()

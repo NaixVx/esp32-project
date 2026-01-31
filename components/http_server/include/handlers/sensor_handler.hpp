@@ -4,5 +4,5 @@
 
 namespace Handlers
 {
-void registerRootEndpoints(httpd_handle_t server, void* ctx);
+void registerSensorEndpoints(httpd_handle_t server, void* ctx);
 }

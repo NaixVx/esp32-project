@@ -2,7 +2,7 @@
 
 #include "esp_http_server.h"
 
-namespace Handlers {
+namespace Handlers
+{
 void registerNetworkEndpoints(httpd_handle_t server, void* ctx);
-
 }

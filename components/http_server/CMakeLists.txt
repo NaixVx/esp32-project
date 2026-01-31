@@ -4,12 +4,14 @@ idf_component_register(
         "src/handlers/root_handler.cpp"
         "src/handlers/device_handler.cpp"
         "src/handlers/network_handler.cpp"
+        "src/handlers/sensor_handler.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES
         esp_http_server
         config_manager
         wifi_manager
+        temperature_sensor
         json
         utils
 )
